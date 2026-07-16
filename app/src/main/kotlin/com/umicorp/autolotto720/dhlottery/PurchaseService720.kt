@@ -118,12 +118,13 @@ class PurchaseService720(
         ))
         val code = r3.optString("resultCode")
         if (code !in SUCCESS_CODES) {
-            throw DhlotteryException("구매 실패(code=$code): ${r3.optString("resultMsg").ifBlank { "결과 불명 — 내역으로 대조하세요" }}")
+            throw DhlotteryException("구매 실패(code=$code): ${r3.optString("resultMsg").ifBlank { r3.optString("resultMessage").ifBlank { "결과 불명 — 내역으로 대조하세요" } }}")
         }
-        // 성공: saleTicket("조+6자리", 콤마구분)에서 실제 발급 티켓 파싱. 누락 시 요청값으로 대체.
-        val sold = r3.optString("saleTicket").split(",").firstOrNull { it.length == 7 }
-        val soldJo = sold?.substring(0, 1)?.toIntOrNull() ?: jo.toInt()
-        val soldNo = sold?.substring(1) ?: number
+        // 성공 응답(실측): data.prchsLtNoInfoLstCn = "번호|주문번호|일련번호|회차|조". 실제 발급 티켓을 파싱하고,
+        // 형식이 어긋나면 요청값(배정 조/번호)으로 안전 대체한다.
+        val info = r3.optJSONObject("data")?.optString("prchsLtNoInfoLstCn").orEmpty().split("|")
+        val soldNo = info.getOrNull(0)?.takeIf { it.matches(Regex("\\d{6}")) } ?: number
+        val soldJo = info.getOrNull(4)?.toIntOrNull()?.takeIf { it in 1..5 } ?: jo.toInt()
         return Ticket720(round = round, jo = soldJo, number = soldNo, purchaseDate = LocalDateTime.now(clock))
     }
 

@@ -45,18 +45,21 @@ class PurchaseService720Test {
 
     private fun enc(json: String) = MockResponse().setBody(JSONObject().put("q", Crypto720.encrypt(json, jses)).toString())
 
-    /** 정상 4단계 디스패처. connPro는 [saleTicket] 발급. */
-    private fun happyDispatcher(saleTicket: String = "1574067") = object : Dispatcher() {
+    // 성공 응답: data.prchsLtNoInfoLstCn = "번호|주문번호|일련번호|회차|조" (라이브 실측).
+    private fun prchsInfo(number: String, jo: Int) = """{"resultCode":"100","data":{"ltPrchsQty":1,"prchsLtNoInfoLstCn":"$number|202607170194572|100000920543794|325|$jo"}}"""
+
+    /** 정상 4단계 디스패처. */
+    private fun happyDispatcher(number: String = "574067", jo: Int = 1) = object : Dispatcher() {
         override fun dispatch(req: RecordedRequest): MockResponse = when {
             req.path?.startsWith("/game/TotalGame.jsp") == true -> MockResponse().setBody("ok")
             req.path == "/game/pension720/game.jsp" ->
-                MockResponse().setBody("ok").addHeader("Set-Cookie", "JSESSIONID=$jses; Path=/")
+                MockResponse().setBody("""<input type="hidden" name="USER_ID" value="tester99"/>""")
+                    .addHeader("Set-Cookie", "JSESSIONID=$jses; Path=/")
             req.path == "/makeAutoNo.do" ->
-                enc("""{"resultCode":"100","selClsNo":"1","selLotNo":"574067","autoSelSet":"S","round":"325"}""")
+                enc("""{"resultCode":"100","selClsNo":"$jo","selLotNo":"$number","autoSelSet":"S","round":"325"}""")
             req.path == "/makeOrderNo.do" ->
                 enc("""{"resultCode":"100","orderNo":"202607160181144","orderDate":"2026-07-16 23:03:23"}""")
-            req.path == "/connPro.do" ->
-                enc("""{"resultCode":"100","orderNo":"202607160181144","saleCnt":"1","saleTicket":"$saleTicket","failCnt":"0"}""")
+            req.path == "/connPro.do" -> enc(prchsInfo(number, jo))
             else -> MockResponse().setResponseCode(404)
         }
     }
@@ -79,7 +82,7 @@ class PurchaseService720Test {
 
     @Test
     fun `single game happy path parses sold ticket`() = runBlocking {
-        server.dispatcher = happyDispatcher(saleTicket = "1574067")
+        server.dispatcher = happyDispatcher(number = "574067", jo = 1)
         val result = service().purchase(1)
         assertEquals(Round720.getUpcomingDrawRound(java.time.ZonedDateTime.now(clock)), result.round)
         assertEquals(1, result.tickets.size)
