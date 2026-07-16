@@ -1,6 +1,8 @@
 package com.umicorp.autolotto720.dhlottery
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -60,4 +62,15 @@ class Round720Test {
     @Test fun drawdate_is_always_thursday() {
         for (round in 1..300) assertEquals(java.time.DayOfWeek.THURSDAY, Round720.getDrawDate(round).dayOfWeek)
     }
+
+    // FIX 6: getDrawDate 하한 가드.
+    @Test(expected = IllegalArgumentException::class)
+    fun getdrawdate_rejects_round_below_one() { Round720.getDrawDate(0) }
+
+    // FIX 5: 720 판매마감 가드(목 17:00~19:05 죽은 창) — 워커·VM 입력검증이 공유하는 단일 판정.
+    @Test fun sales_open_thursday_1659() = assertFalse(Round720.isSalesClosed(at(2026, 7, 16, 16, 59)))
+    @Test fun sales_closed_thursday_1700() = assertTrue(Round720.isSalesClosed(at(2026, 7, 16, 17, 0)))
+    @Test fun sales_open_wednesday() = assertFalse(Round720.isSalesClosed(at(2026, 7, 15, 10, 0)))
+    @Test fun sales_open_friday() = assertFalse(Round720.isSalesClosed(at(2026, 7, 17, 10, 0)))
+    @Test fun sales_open_thursday_after_1905_draw_rollover() = assertFalse(Round720.isSalesClosed(at(2026, 7, 16, 19, 6)))
 }

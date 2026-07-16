@@ -38,8 +38,10 @@ class ResultService720(private val session: DhlotterySession = DhlotterySession(
                 val items = JSONObject(body).optJSONObject("data")?.optJSONArray("result")
                 if (items == null || items.length() == 0) return@withContext null
 
+                // optJSONObject로 null/비객체 원소는 건너뛴다 — 앞쪽 malformed 원소 하나가 유효한
+                // 타깃 회차 조회 전체를 실패시키지 않도록(R4). 선택된 타깃 자체의 파싱 실패는 여전히 null.
                 val item = (0 until items.length())
-                    .map { items.getJSONObject(it) }
+                    .mapNotNull { items.optJSONObject(it) }
                     .let { list -> if (round != null) list.find { it.optInt("psltEpsd") == round } else list.firstOrNull() }
                     ?: return@withContext null
 
@@ -52,6 +54,7 @@ class ResultService720(private val session: DhlotterySession = DhlotterySession(
                 )
             }
         } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e   // 취소는 삼키지 않는다(R3).
             null
         }
     }

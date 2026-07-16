@@ -50,4 +50,21 @@ class ResultService720Test {
         assertEquals(null, ResultService720(session).getWinningNumbers(1))
         server.shutdown()
     }
+
+    // FIX 4: 앞쪽 null/비객체 원소가 있어도 유효한 타깃 회차를 찾아 파싱한다(optJSONObject skip).
+    @Test fun leading_null_element_still_resolves_target() = runTest {
+        val body = """{"data":{"result":[null,{"psltEpsd":319,"wnBndNo":"3","wnRnkVl":"201327","bnsRnkVl":"632035","psltRflYmd":"20260611"}]}}"""
+        val server = MockWebServer().apply {
+            enqueue(MockResponse().setBody("<html>ok</html>"))
+            enqueue(MockResponse().setBody(body))
+            start()
+        }
+        val session = DhlotterySession(baseUrl = server.url("/").toString().trimEnd('/'))
+        val result = ResultService720(session).getWinningNumbers(319)
+        assertNotNull(result)
+        assertEquals(319, result!!.round)
+        assertEquals(3, result.jo)
+        assertEquals("201327", result.number)
+        server.shutdown()
+    }
 }

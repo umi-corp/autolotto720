@@ -209,14 +209,14 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     /** 요일 변경. 구매 불가 시간이면 false 반환(원본 검증 스낵바). */
     fun setPurchaseDay(day: Int): Boolean {
-        if (!isValidPurchaseTime(day, autoPurchaseHour.value)) return false
+        if (!isValidPurchaseTime()) return false
         viewModelScope.launch { container.setAutoPurchaseDay(day) }
         return true
     }
 
     /** 시간 변경. 구매 불가 시간이면 false 반환. */
     fun setPurchaseTime(hour: Int, minute: Int): Boolean {
-        if (!isValidPurchaseTime(autoPurchaseDay.value, hour)) return false
+        if (!isValidPurchaseTime()) return false
         viewModelScope.launch { container.setAutoPurchaseTime(hour, minute) }
         return true
     }
@@ -228,12 +228,10 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     companion object {
         /**
-         * 구매 가능 시간 (원본 `_isValidPurchaseTime`). day: 1=월 .. 7=일.
-         * 토(6): 06:00~19:59, 그 외(평일/일): 06:00~23:59. (토 20:00~일 05:59 판매정지)
-         * ponytail: 이 하드 검증은 사이트 전반 운영시간 규칙(645 유산) — 720 목요일 마감(17:00) 자체는
-         * 하드 블록이 아니라 SettingsScreen의 인라인 경고(Task14)로만 안내한다.
+         * 구매 가능 시간 (연금복권720+ 규칙). 645 토요일 판매정지 규칙을 대체 — 720은 목 17:00 마감,
+         * 19:05 추첨. AutoPurchaseWorker의 판매마감 가드와 동일한 [Round720.isSalesClosed](단일 판정)을
+         * 공유해 드리프트를 막는다: 지금(KST)이 다가오는 회차의 추첨일(목)이고 17:00 이후면 구매 불가.
          */
-        fun isValidPurchaseTime(day: Int, hour: Int): Boolean =
-            if (day == 6) hour in 6..19 else hour >= 6
+        fun isValidPurchaseTime(): Boolean = !Round720.isSalesClosed()
     }
 }

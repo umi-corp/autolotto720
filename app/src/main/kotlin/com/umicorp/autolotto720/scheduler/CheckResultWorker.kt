@@ -13,6 +13,7 @@ import com.umicorp.autolotto720.dhlottery.DhlotterySession
 import com.umicorp.autolotto720.dhlottery.HistoryService720
 import com.umicorp.autolotto720.dhlottery.ResultService720
 import com.umicorp.autolotto720.dhlottery.Round720
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * 당첨확인 백그라운드 작업 — 연금복권720+ 포트 (원본 `_onCheckResultAlarm`/645 CheckResultWorker 기반).
@@ -35,6 +36,7 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
         val done = try {
             executeCheckResult(lastAttempt)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e   // 코루틴 취소는 삼키지 않는다 — 오보/오분류 방지(R3).
             if (lastAttempt) Notifications.show(ctx, "⚠️ AutoLotto720 오류", "당첨 결과 확인에 실패했습니다.", 99)
             lastAttempt
         }
@@ -54,8 +56,14 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
         if (!store.getAutoEnabled()) return true
 
         val round = Round720.getLatestCompletedRound()
-        // 당첨번호 미게시(null) → 재시도. 결과확인은 로그인 불필요 — 자체 세션(Task6, 라이브).
-        val winning = ResultService720().getWinningNumbers(round) ?: return false
+        // 당첨번호 미게시(null): 마지막 시도가 아니면 재시도(false), 마지막 시도면 폴백 알림 후 종료(true).
+        // (미게시가 영구 지속돼도 무한 재시도하지 않고 결과확인 실패를 통지한다 — 결과확인은 로그인 불필요.)
+        val winning = ResultService720().getWinningNumbers(round)
+        if (winning == null) {
+            val notif = unpostedNotification(round, lastAttempt) ?: return false
+            Notifications.show(ctx, notif.first, notif.second, 2, tab = Notifications.TAB_HISTORY)
+            return true
+        }
 
         // 로그인 → 구매이력 조회. 실패(로그인/네트워크 등)는 마지막 시도 전까지 재시도.
         val tickets: List<Ticket720> = try {
@@ -69,6 +77,7 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
 
             HistoryService720(session, ResultService720(session)).fetchRecentPurchases()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e   // 코루틴 취소는 삼키지 않는다(R3).
             if (!lastAttempt) return false
             emptyList() // 마지막 시도 — 매칭 없음으로 취급해 당첨번호만 폴백 알림
         }
@@ -117,8 +126,13 @@ internal fun resolveCheckOutcome(
     if (winning == null) return CheckOutcome.Retry
     val matched = allTickets.filter { it.round == round }
     if (matched.isEmpty()) return CheckOutcome.NoMatch(winning)
+    // 미확정(null)·미추첨(PENDING) 등수는 로컬 재계산 — 미설정을 낙첨(NONE)으로 오보하지 않는다(R2 N4).
+    // rank과 함께 prize도 일시금 표에서 세팅 → 3~7등이 총액 합산에 정상 반영된다.
     val resolved = matched.map { t ->
-        if (t.rank == Rank720.PENDING) t.copy(rank = RankChecker720.rankOf(t.jo, t.number, winning)) else t
+        if (t.rank == null || t.rank == Rank720.PENDING) {
+            val r = RankChecker720.rankOf(t.jo, t.number, winning)
+            t.copy(rank = r, prize = Notifications.lumpSumPrizeOf(r))
+        } else t
     }
     return CheckOutcome.Matched(winning, resolved)
 }
@@ -137,10 +151,18 @@ internal fun buildMatchedNotification(round: Int, winning: WinningNumbers720, ti
     val title = if (isWinner) "🎉 제 ${round}회 당첨!!!" else "😔 제 ${round}회 낙첨..."
     var body = "$winningLine\n\n$gameLines"
     // 3~7등(일시금)만 합산 — 1·2등·보너스는 연금식이라 단일 총액이 아니라 위 라인의 문구로 표기.
-    val lumpSum = tickets.filter { it.prize > 0 }.sumOf { it.prize }
+    // 총액도 등수에서 파생(단일 출처) — 라인 문구와 어긋나지 않고, 미설정 prize 필드에 좌우되지 않는다.
+    val lumpSum = tickets.sumOf { Notifications.lumpSumPrizeOf(it.rank ?: Rank720.NONE) }
     if (lumpSum > 0) body += "\n\n총 당첨금(일시금): ₩${Notifications.formatThousands(lumpSum)}"
     return title to body
 }
+
+/**
+ * 당첨번호 미게시(null) 처리 결정 — 순수 함수로 분리해 "마지막 시도 종료"를 워커 I/O 없이 검증 가능하게 한다.
+ * @return null=재시도, non-null=(제목, 본문) 폴백 알림 후 재시도 체인 종료.
+ */
+internal fun unpostedNotification(round: Int, lastAttempt: Boolean): Pair<String, String>? =
+    if (lastAttempt) "🎱 제 ${round}회 결과 확인 실패" to "결과 확인 실패 (당첨번호 미게시)" else null
 
 /** 매칭 구매 없음(또는 조회 실패 마지막 시도) 폴백 — 당첨번호만 알림(제목, 본문). */
 internal fun buildFallbackNotification(round: Int, winning: WinningNumbers720): Pair<String, String> {

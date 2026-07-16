@@ -4,6 +4,7 @@ import com.umicorp.autolotto720.data.Rank720
 import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.data.WinningNumbers720
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDateTime
@@ -37,6 +38,18 @@ class CheckResultWorkerTest {
         assertEquals(CheckOutcome.Retry, outcome)
     }
 
+    // ---------- FIX 1: 미게시 마지막 시도 종료(무한 재시도 방지) ----------
+
+    @Test fun `unposted before last attempt retries (no notification)`() {
+        assertNull(unpostedNotification(319, lastAttempt = false))
+    }
+
+    @Test fun `unposted on last attempt terminates with a failure notice`() {
+        val (title, body) = unpostedNotification(319, lastAttempt = true)!!
+        assertTrue(title.contains("319"))
+        assertTrue(body.contains("당첨번호 미게시"))
+    }
+
     // ---------- 매칭 구매 없음 → 폴백(당첨번호만) ----------
 
     @Test fun `no matching ticket for round falls back to winning-numbers-only`() {
@@ -65,6 +78,23 @@ class CheckResultWorkerTest {
         val outcome = resolveCheckOutcome(winning, allTickets = listOf(resolved), round = 319)
         val matched = outcome as CheckOutcome.Matched
         assertEquals(Rank720.NONE, matched.tickets.single().rank)
+    }
+
+    // FIX 2: null 등수(미설정)도 재계산 — 낙첨(NONE)으로 오보하지 않는다.
+    @Test fun `null-rank ticket is recomputed not left unset`() {
+        val unset = ticket(jo = 3, number = "201327", rank = null) // matches winning exactly → 1등
+        val outcome = resolveCheckOutcome(winning, allTickets = listOf(unset), round = 319)
+        assertEquals(Rank720.FIRST, (outcome as CheckOutcome.Matched).tickets.single().rank)
+    }
+
+    // FIX 2: 재계산 시 prize도 세팅 → 3~7등이 총액 합산에 반영(수정 전엔 prize=0으로 누락).
+    @Test fun `recomputed lump-sum ticket contributes its prize to the total`() {
+        val pending = ticket(jo = 1, number = "901327", rank = Rank720.PENDING) // last-5 "01327" → 3등, 입력 prize=0
+        val matched = resolveCheckOutcome(winning, allTickets = listOf(pending), round = 319) as CheckOutcome.Matched
+        assertEquals(Rank720.THIRD, matched.tickets.single().rank)
+        assertEquals(1_000_000L, matched.tickets.single().prize)
+        val (_, body) = buildMatchedNotification(319, winning, matched.tickets)
+        assertTrue(body.contains("총 당첨금(일시금): ₩1,000,000"))
     }
 
     // ---------- 다중 티켓 알림 문구 ----------

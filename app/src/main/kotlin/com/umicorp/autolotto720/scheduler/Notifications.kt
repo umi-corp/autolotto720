@@ -109,6 +109,19 @@ object Notifications {
         Rank720.SEVENTH -> "1천원"
         Rank720.NONE, Rank720.PENDING -> ""
     }
+
+    /**
+     * 등수 → 일시금(원). 3~7등만 단일 총액 합산 대상(1·2등·보너스는 연금식이라 0). [rank720PrizeText]와
+     * 동일 표(단일 출처) — 라인 문구와 총액을 모두 등수에서 파생시켜 어긋나지 않게 한다.
+     */
+    fun lumpSumPrizeOf(rank: Rank720): Long = when (rank) {
+        Rank720.THIRD -> 1_000_000
+        Rank720.FOURTH -> 100_000
+        Rank720.FIFTH -> 50_000
+        Rank720.SIXTH -> 5_000
+        Rank720.SEVENTH -> 1_000
+        else -> 0
+    }
 }
 
 /**

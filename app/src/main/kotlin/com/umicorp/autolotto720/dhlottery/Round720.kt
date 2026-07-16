@@ -2,6 +2,7 @@ package com.umicorp.autolotto720.dhlottery
 
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
@@ -56,5 +57,22 @@ object Round720 {
     }
 
     /** 회차 → 추첨일(그 회차의 목요일). FIRST_ROUND가 목요일이므로 항상 목요일. */
-    fun getDrawDate(round: Int): LocalDate = FIRST_ROUND.plusWeeks((round - 1).toLong())
+    fun getDrawDate(round: Int): LocalDate {
+        require(round >= 1) { "회차는 1 이상이어야 합니다: $round" }
+        return FIRST_ROUND.plusWeeks((round - 1).toLong())
+    }
+
+    /** 판매마감 시각(목 17:00). 이후 19:05 추첨까지가 판매정지 창. */
+    private val SALES_CLOSE: LocalTime = LocalTime.of(17, 0)
+
+    /**
+     * 판매마감 가드(720 규칙): 다가오는 회차의 추첨일이 오늘(KST)이고 17:00 이후면 true(마감).
+     * 목 19:05 추첨 후엔 다가오는 회차가 다음 주로 롤오버되므로(추첨일≠오늘) false로 다시 열린다.
+     * AutoPurchaseWorker(구매 가드)와 PurchaseSetup/Settings VM(입력 검증) 양쪽이 이 단일 판정을 공유해
+     * 드리프트를 막는다(645 토요일 규칙 잔재 제거).
+     */
+    internal fun isSalesClosed(now: ZonedDateTime = ZonedDateTime.now(KST)): Boolean {
+        val kstNow = now.withZoneSameInstant(KST)   // 입력 존 무관 KST 정규화(R1 F14)
+        return getDrawDate(getUpcomingDrawRound(kstNow)) == kstNow.toLocalDate() && kstNow.toLocalTime() >= SALES_CLOSE
+    }
 }

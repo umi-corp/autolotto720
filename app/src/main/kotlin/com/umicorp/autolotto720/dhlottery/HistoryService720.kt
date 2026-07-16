@@ -19,8 +19,10 @@ class HistoryService720(
 ) {
 
     /** 최근 구매 내역(최대 [count]건) — 결과확인 워커용. */
-    suspend fun fetchRecentPurchases(count: Int = 10): List<Ticket720> =
-        fetchPurchases(LocalDate.now().minusDays(90), LocalDate.now(), count)
+    suspend fun fetchRecentPurchases(count: Int = 10): List<Ticket720> {
+        val today = LocalDate.now(Round720.KST)
+        return fetchPurchases(today.minusDays(90), today, count)
+    }
 
     /** [from]~[to](포함) 기간의 구매 내역. */
     suspend fun fetchPurchases(from: LocalDate, to: LocalDate, count: Int = Int.MAX_VALUE): List<Ticket720> {
