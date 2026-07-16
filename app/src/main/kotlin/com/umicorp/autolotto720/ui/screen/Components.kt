@@ -1,23 +1,20 @@
 package com.umicorp.autolotto720.ui.screen
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -26,19 +23,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -46,118 +39,37 @@ import androidx.compose.ui.unit.sp
 import com.umicorp.autolotto720.ui.theme.MotionSpecs
 import com.umicorp.autolotto720.ui.theme.ctaGradient
 import com.umicorp.autolotto720.ui.theme.heroGradient
-import com.umicorp.autolotto720.ui.util.ballColor
 
 /**
- * 로또 번호 공 (홈·번호·내역 공유). Lucky Gloss "캔디" 룩: 방사형 하이라이트 + 소프트 그림자 + 림.
- * 공개 API는 100% 기존 그대로 (n, size, selected, dimmed, bordered, onClick) — 화면 수정 불필요.
- *
- * - [selected]=false: 미선택(번호 그리드) — 중립 톤(surfaceVariant), 흐린 광택.
- * - [dimmed]=true: 추첨 후 비당첨(내역) — ballColor 흐림.
- * - [bordered]=true: 보너스 — 강조 림.
- * - onClick != null: 탭 시 프레스 스프링(0.92 → overshoot 1.12 → settle), 선택 시 elevation 상승.
- *
- * ponytail: 공 숫자색 흰색은 ballColor 브랜드 처리의 일부(토큰 예외 = ballColor와 한 묶음).
+ * 조+6자리 번호 표시 (홈 당첨번호 · 내역 티켓 공유, Task11/13). 원 [n]볼 그리드(LottoBall, 645
+ * 1~45)를 대체한다 — 720은 "조(1~5) + 6자리 문자열" 표기라 볼 그리드 개념이 없다.
+ * [joLabel]은 호출부가 이미 로컬라이즈해 넘긴다(`ui.util.localizedJoLabel`/`rankBonus` 등).
  */
 @Composable
-fun LottoBall(
-    n: Int,
+fun JoNumberDisplay(
+    joLabel: String,
+    number: String,
     modifier: Modifier = Modifier,
-    size: Dp = 36.dp,
-    selected: Boolean = true,
-    dimmed: Boolean = false,
-    bordered: Boolean = false,
-    onClick: (() -> Unit)? = null,
+    accent: Color = MaterialTheme.colorScheme.primary,
 ) {
-    val neutral = MaterialTheme.colorScheme.surfaceVariant
-    val base by animateColorAsState(
-        targetValue = when {
-            !selected -> neutral
-            dimmed -> lerp(ballColor(n), neutral, 0.55f)
-            else -> ballColor(n)
-        },
-        animationSpec = MotionSpecs.gentle(),
-        label = "ballBase",
-    )
-    val fg = when {
-        !selected -> MaterialTheme.colorScheme.onSurfaceVariant
-        dimmed -> Color.White.copy(alpha = 0.7f)
-        else -> Color.White
-    }
-
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    // 프레스 = 0.92로 눌림 → 놓으면 bouncy 스프링이 1.0으로 돌며 overshoot(≈1.12) 발생.
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.92f else 1f,
-        animationSpec = MotionSpecs.bouncy(),
-        label = "ballScale",
-    )
-    val elevation by animateDpAsState(
-        targetValue = if (selected && !dimmed) 5.dp else 1.dp,
-        animationSpec = MotionSpecs.gentle(),
-        label = "ballElev",
-    )
-
-    val highlight = lerp(base, Color.White, 0.65f)
-    val rim = lerp(base, Color.Black, if (selected && !dimmed) 0.28f else 0.12f)
-    // 강조 림은 볼 색상과 같은 계열(진한 톤) — 파랑볼→진파랑, 노랑볼→진노랑 (사용자 피드백)
-    val bonusRim = lerp(ballColor(n), Color.Black, 0.38f)
-
-    Box(
-        modifier = modifier
-            .size(size)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .shadow(elevation, CircleShape, clip = false)
-            .clip(CircleShape)
-            .drawBehind {
-                val w = this.size.width
-                val h = this.size.height
-                // 캔디 방사형 셰이딩: 좌상단 하이라이트 → base → 하단 어두운 림.
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(highlight, base, rim),
-                        center = Offset(w * 0.35f, h * 0.30f),
-                        radius = w * 0.85f,
-                    ),
-                )
-                // 상단 스페큘러 하이라이트.
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.55f), Color.Transparent),
-                        center = Offset(w * 0.36f, h * 0.24f),
-                        radius = w * 0.28f,
-                    ),
-                )
-            }
-            .then(
-                when {
-                    bordered -> Modifier.border(2.5.dp, bonusRim, CircleShape)
-                    !selected -> Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                    else -> Modifier
-                }
-            )
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = interaction,
-                        indication = null,
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier
-                }
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(accent)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(joLabel, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+        }
+        Spacer(Modifier.width(10.dp))
         Text(
-            text = n.toString(),
-            color = fg,
+            number,
+            fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            fontSize = (size.value * 0.36f).sp,
+            letterSpacing = 3.sp,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }

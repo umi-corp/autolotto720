@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -52,27 +51,30 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.umicorp.autolotto720.R
-import com.umicorp.autolotto720.data.Purchase
+import com.umicorp.autolotto720.data.Rank720
+import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.ui.appViewModel
 import com.umicorp.autolotto720.ui.theme.LgGold
 import com.umicorp.autolotto720.ui.theme.LgTeal
 import com.umicorp.autolotto720.ui.theme.MotionSpecs
-import com.umicorp.autolotto720.ui.util.formatNumber
+import com.umicorp.autolotto720.ui.util.localizedJoLabel
+import com.umicorp.autolotto720.ui.util.localizedPrize
 import com.umicorp.autolotto720.ui.util.localizedRank
 import com.umicorp.autolotto720.ui.vm.HistoryViewModel
 import kotlinx.coroutines.delay
 
 /**
- * 구매/당첨 기록 (원본 history_screen.dart 1:1) — Lucky Gloss 리디자인.
+ * 구매/당첨 기록 (Task13 — 연금복권720+ 티켓 단위 전환) — Lucky Gloss 리디자인.
  *
- * 로그인 상태면 dhlottery에서 최근 구매내역 라이브 조회. 회차별 프로스트 카드(틴트 헤더 + StatusPill),
- * 게임 A~E = 글로시 캔디 볼 6개 + 행별 상태 필. 낙첨 회차는 볼 dimmed로 은은하게 뮤트.
- * 시그니처 모션: 카드 스태거 등장(fade + rise, MotionSpecs.staggerDelay).
+ * 로그인 상태면 dhlottery에서 최근 구매내역(티켓, 조+6자리) 라이브 조회. [Feature720.PURCHASE_ENABLED]
+ * 가 꺼져 있는 동안은 [HistoryViewModel]이 항상 빈 목록을 받으므로 이 화면은 사실상 항상 빈 상태 —
+ * 그 경우 "구매 기능 준비 중" 안내를 덧붙인다. 티켓 카드는 회차별 프로스트 카드(틴트 헤더 + StatusPill)
+ * + 조+번호 표기. 시그니처 모션: 카드 스태거 등장(fade + rise, MotionSpecs.staggerDelay).
  */
 @Composable
 fun HistoryScreen(modifier: Modifier = Modifier) {
     val vm: HistoryViewModel = appViewModel()
-    val purchases by vm.purchases.collectAsState()
+    val tickets by vm.tickets.collectAsState()
     val loading by vm.loading.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
     val canLoadMore by vm.canLoadMore.collectAsState()
@@ -101,8 +103,8 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
     ) { inner ->
         // 로딩→빈화면→목록 전환을 부드럽게(표준 Crossfade — 1.4.0엔 Expressive 컴포넌트 미수록).
         val phase = when {
-            loading && purchases.isEmpty() -> 0
-            purchases.isEmpty() -> 1
+            loading && tickets.isEmpty() -> 0
+            tickets.isEmpty() -> 1
             else -> 2
         }
         Box(Modifier.fillMaxSize().padding(inner)) {
@@ -130,7 +132,7 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
                             contentPadding = PaddingValues(20.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
-                            itemsIndexed(purchases) { i, item -> HistoryCard(item, index = i) }
+                            itemsIndexed(tickets) { i, item -> TicketCard(item, index = i) }
                             if (canLoadMore) {
                                 item { LoadMoreButton(loading = loadingMore, onClick = vm::loadMore) }
                             }
@@ -163,6 +165,13 @@ private fun EmptyState(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(4.dp))
+        // 720 구매는 게이트 중(Feature720.PURCHASE_ENABLED=false) — 로그인 여부와 무관하게 항상 안내.
+        Text(
+            stringResource(R.string.historyComingSoonNote),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
         )
         if (error != null) {
             Spacer(Modifier.height(8.dp))
@@ -200,10 +209,14 @@ private fun LoadMoreButton(loading: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** 티켓 1건 카드: 헤더(회차+날짜+상태) · 조+번호 · (당첨 시) 당첨금/연금 푸터. */
 @Composable
-private fun HistoryCard(item: Purchase, index: Int) {
-    val winner = item.rank != null && item.rank != "nowin"
-    val dateStr = "%04d-%02d-%02d".format(item.date.year, item.date.monthValue, item.date.dayOfMonth)
+private fun TicketCard(item: Ticket720, index: Int) {
+    val rank = item.rank
+    val pending = !item.checked || rank == null || rank == Rank720.PENDING
+    val noWin = rank == Rank720.NONE
+    val winner = !pending && !noWin
+    val dateStr = "%04d-%02d-%02d".format(item.purchaseDate.year, item.purchaseDate.monthValue, item.purchaseDate.dayOfMonth)
 
     // 시그니처 모션: 스태거 등장 (fade + rise). ponytail: 스크롤로 재진입 시 재생됨 — 짧고 은은해 허용.
     var shown by remember { mutableStateOf(false) }
@@ -219,7 +232,7 @@ private fun HistoryCard(item: Purchase, index: Int) {
 
     val shape = MaterialTheme.shapes.large
     // 헤더 틴트: 당첨=골드(진하게), 대기=골드(옅게), 낙첨=틸 민트(뮤트).
-    val headerAccent = if (item.checked && !winner) LgTeal else LgGold
+    val headerAccent = if (noWin) LgTeal else LgGold
     val headerBg = lerp(headerAccent, MaterialTheme.colorScheme.surfaceContainerLowest, if (winner) 0.70f else 0.86f)
 
     SectionCard(
@@ -255,30 +268,21 @@ private fun HistoryCard(item: Purchase, index: Int) {
                 )
             }
             when {
-                !item.checked -> StatusPill(stringResource(R.string.statusPending), PillTone.Pending)
+                pending -> StatusPill(stringResource(R.string.rankPendingDraw), PillTone.Pending)
                 winner -> StatusPill(
-                    stringResource(R.string.rankWithEmoji, localizedRank(item.rank ?: "nowin")),
+                    stringResource(R.string.rankWithEmoji, localizedRank(rank!!)),
                     PillTone.Win,
                 )
-                else -> StatusPill(stringResource(R.string.statusNoWin), PillTone.Lose)
+                else -> StatusPill(stringResource(R.string.rankNoWin720), PillTone.Lose)
             }
         }
 
-        // 본문: 게임 A~E — 글로시 볼 + 행별 상태
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item.numbers.forEachIndexed { i, nums ->
-                GameRow(
-                    letter = ('A' + i).toString(),
-                    nums = nums,
-                    winningNumbers = item.winningNumbers,
-                    bonusNumber = item.bonusNumber,
-                    checked = item.checked,
-                    gameRank = item.gameRanks?.getOrNull(i),
-                )
-            }
+        // 본문: 조 + 6자리 번호
+        Column(Modifier.padding(16.dp)) {
+            JoNumberDisplay(joLabel = localizedJoLabel(item.jo), number = item.number)
         }
 
-        // 푸터: 당첨금 (골드 밴드)
+        // 푸터: 당첨금(3~7등) / 연금 문구(1·2등·보너스) — 골드 밴드
         if (winner) {
             Box(
                 modifier = Modifier
@@ -288,74 +292,12 @@ private fun HistoryCard(item: Purchase, index: Int) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    stringResource(R.string.prizeLabel, formatNumber(item.prize)),
+                    localizedPrize(rank!!, item.prize),
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.ExtraBold,
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
-        }
-    }
-}
-
-/**
- * 게임 1줄: 라벨 + 글로시 볼(당첨 강조/흐림/보너스 림) + 상태 필(우측 고정).
- * 좁은 기기에선 FlowRow 줄바꿈으로 필이 아래줄 왼쪽에 떨어지던 문제 → 볼 크기를 가용 폭에 맞춰
- * 축소해 항상 한 줄 유지 (갤럭시 유효 폭 384dp 사용자 리포트).
- */
-@Composable
-private fun GameRow(
-    letter: String,
-    nums: List<Int>,
-    winningNumbers: List<Int>?,
-    bonusNumber: Int?,
-    checked: Boolean,
-    gameRank: String?,
-) {
-    val hasResult = checked && winningNumbers != null
-    val gameWinner = gameRank != null && gameRank != "nowin" && gameRank != "pending"
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            letter,
-            modifier = Modifier.width(24.dp),
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.ExtraBold,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        // 라벨·필이 자연 폭을 가져간 뒤 남는 폭을 볼들이 나눠 갖는다 (weight=나머지 전부).
-        BoxWithConstraints(Modifier.weight(1f)) {
-            // 하한 없음: 큰 글씨·긴 필로 폭이 더 좁아져도 필을 침범하는 대신 볼이 계속 줄어든다
-            val gaps = (nums.size - 1).coerceAtLeast(0)
-            val ball = ((maxWidth - 6.dp * gaps) / nums.size.coerceAtLeast(1))
-                .coerceIn(0.dp, 32.dp)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                nums.forEach { n ->
-                    val isMatch = winningNumbers?.contains(n) == true
-                    val isBonusMatch = bonusNumber != null && bonusNumber == n
-                    LottoBall(
-                        n = n,
-                        size = ball,
-                        dimmed = hasResult && !(isMatch || isBonusMatch),
-                        // 맞은 번호는 홈 보너스 볼과 동일한 강조 림 — dimmed 해제만으론 구분이 흐림(사용자 피드백)
-                        bordered = hasResult && (isMatch || isBonusMatch),
-                    )
-                }
-            }
-        }
-        if (gameRank != null) {
-            StatusPill(
-                text = if (gameWinner) stringResource(R.string.rankWithEmoji, localizedRank(gameRank))
-                else localizedRank(gameRank),
-                tone = when {
-                    gameWinner -> PillTone.Win
-                    gameRank == "pending" -> PillTone.Pending
-                    else -> PillTone.Lose
-                },
-            )
         }
     }
 }

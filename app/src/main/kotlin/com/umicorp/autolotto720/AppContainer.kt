@@ -19,15 +19,13 @@ import com.umicorp.autolotto720.update.UpdateInfo
 import java.io.File
 import com.umicorp.autolotto720.ui.vm.HistoryViewModel
 import com.umicorp.autolotto720.ui.vm.HomeViewModel
-import com.umicorp.autolotto720.ui.vm.NumberViewModel
+import com.umicorp.autolotto720.ui.vm.PurchaseSetupViewModel
 import com.umicorp.autolotto720.ui.vm.SettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * 앱 스코프 컴포지션 루트 (원본 Riverpod `ProviderScope` + 전역 프로바이더 대응).
@@ -72,7 +70,7 @@ class AppContainer(context: Context) {
     private val _autoGames = MutableStateFlow(0)
     val autoGames: StateFlow<Int> = _autoGames.asStateFlow()
 
-    private val _autoPurchaseDay = MutableStateFlow(7)     // 기본 일요일 (SecureStore 기본값과 동일)
+    private val _autoPurchaseDay = MutableStateFlow(4)     // 기본 목요일(720 추첨일) — SecureStore 기본값과 동일
     val autoPurchaseDay: StateFlow<Int> = _autoPurchaseDay.asStateFlow()
 
     private val _autoPurchaseHour = MutableStateFlow(9)
@@ -227,36 +225,6 @@ class AppContainer(context: Context) {
         store.setBalanceAlertThreshold(v)
     }
 
-    // === 수동 번호 (manual_numbers: 5슬롯 JSON, 백그라운드 구매 잡과 공유 포맷) ===
-
-    /** SecureStore의 manual_numbers → 5슬롯 리스트(null=미설정 / emptyList=자동 / [nums]=수동). */
-    suspend fun loadManualGames(): List<List<Int>?> = withContext(Dispatchers.IO) {
-        val out = MutableList<List<Int>?>(5) { null }
-        runCatching {
-            val arr = JSONArray(store.getManualNumbers())
-            for (i in 0 until minOf(arr.length(), 5)) {
-                if (arr.isNull(i)) continue
-                val g = arr.optJSONArray(i) ?: continue
-                out[i] = if (g.length() == 0) emptyList() else (0 until g.length()).map { g.getInt(it) }
-            }
-        }
-        out
-    }
-
-    /** 5슬롯 → JSON 저장 + 게임 수(=설정된 슬롯 수) 반영. 백그라운드 구매 잡이 같은 포맷으로 읽는다. */
-    suspend fun saveManualGames(games: List<List<Int>?>) = withContext(Dispatchers.IO) {
-        setAutoGames(games.count { it != null })
-        val arr = JSONArray()
-        for (g in games) {
-            when {
-                g == null -> arr.put(JSONObject.NULL)
-                g.isEmpty() -> arr.put(JSONArray())
-                else -> arr.put(JSONArray(g))
-            }
-        }
-        store.setManualNumbers(arr.toString())
-    }
-
     // === 데이터 초기화 (원본 설정 화면 `_showResetDialog`) ===
     suspend fun resetAll() = withContext(Dispatchers.IO) {
         store.clearAll()
@@ -266,7 +234,7 @@ class AppContainer(context: Context) {
         _balance.value = 0
         _autoEnabled.value = false
         _autoGames.value = 0
-        _autoPurchaseDay.value = 7
+        _autoPurchaseDay.value = 4
         _autoPurchaseHour.value = 9
         _autoPurchaseMinute.value = 0
         _balanceAlertEnabled.value = false
@@ -277,7 +245,7 @@ class AppContainer(context: Context) {
     /** 화면별 ViewModel 팩토리(컴포지션 루트가 컨테이너 주입). */
     val viewModelFactory: ViewModelProvider.Factory = viewModelFactory {
         initializer { HomeViewModel(this@AppContainer) }
-        initializer { NumberViewModel(this@AppContainer) }
+        initializer { PurchaseSetupViewModel(this@AppContainer) }
         initializer { HistoryViewModel(this@AppContainer) }
         initializer { SettingsViewModel(this@AppContainer) }
     }

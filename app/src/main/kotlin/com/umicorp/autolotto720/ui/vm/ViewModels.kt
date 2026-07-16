@@ -3,9 +3,9 @@ package com.umicorp.autolotto720.ui.vm
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umicorp.autolotto720.AppContainer
-import com.umicorp.autolotto720.data.Purchase
-import com.umicorp.autolotto720.data.WinningResult
-import com.umicorp.autolotto720.dhlottery.PurchaseService
+import com.umicorp.autolotto720.data.Ticket720
+import com.umicorp.autolotto720.data.WinningNumbers720
+import com.umicorp.autolotto720.dhlottery.Round720
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 /**
- * 화면별 ViewModel (원본 Riverpod 화면 상태 포트).
+ * 화면별 ViewModel (원본 Riverpod 화면 상태 포트, Task11~14에서 연금복권720+로 전환).
  *
  * 공유 반응형 상태(로그인·잔액·자동구매설정·언어·잔액알림)는 [AppContainer]가 단일 출처로 들고
  * 있고(원본 전역 프로바이더와 1:1), ViewModel은 그 StateFlow를 그대로 재노출 + 화면-로컬 상태와
@@ -22,7 +22,7 @@ import java.time.LocalDate
  * UI는 단위테스트 불가 → 검증은 컴파일 + assembleDebug. 실제 화면 배선은 Slice 5b.
  */
 
-/** 홈: 카운트다운(회차) + 지난 회차 당첨번호 + 잔액/자동구매 상태(공유). */
+/** 홈: 카운트다운(목요일 19:05 추첨) + 지난 회차 720 당첨번호 + 잔액/자동구매 상태(공유). */
 class HomeViewModel(private val container: AppContainer) : ViewModel() {
     val isLoggedIn = container.isLoggedIn
     val balance = container.balance
@@ -33,22 +33,28 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     val balanceAlertEnabled = container.balanceAlertEnabled
     val balanceAlertThreshold = container.balanceAlertThreshold
 
-    /** 현재 판매 중인 회차(KST). 카운트다운 헤더용. */
-    val currentRound: Int get() = PurchaseService.getCurrentRound()
+    /** 지금 판매 중(=다가오는 추첨)인 회차. 카운트다운 헤더용. */
+    val currentRound: Int get() = Round720.getUpcomingDrawRound()
 
-    private val _winning = MutableStateFlow<WinningResult?>(null)
-    val winning: StateFlow<WinningResult?> = _winning.asStateFlow()
+    private val _winning = MutableStateFlow<WinningNumbers720?>(null)
+    val winning: StateFlow<WinningNumbers720?> = _winning.asStateFlow()
     private val _loadingNumbers = MutableStateFlow(false)
     val loadingNumbers: StateFlow<Boolean> = _loadingNumbers.asStateFlow()
 
     init { fetchWinningNumbers() }
 
-    /** 지난 회차(현재-1) 당첨번호 조회. 실패는 무시(원본 debugPrint 후 무시). */
+    /**
+     * 최신 완료 회차(현재-추첨) 당첨번호 조회. 추첨(목 19:05) 직후엔 아직 결과가 게시되지 않아
+     * null이 올 수 있어 그 경우 직전 회차로 폴백 — 홈 카드가 비지 않게 한다(R2 codex#12).
+     * 둘 다 실패하면 기존 값을 유지(원본 debugPrint 후 무시와 동일).
+     */
     fun fetchWinningNumbers() {
         viewModelScope.launch {
             _loadingNumbers.value = true
-            runCatching { container.resultService.getWinningNumbers(currentRound - 1) }
-                .getOrNull()?.let { _winning.value = it }
+            val latest = Round720.getLatestCompletedRound()
+            val result = runCatching { container.resultService720.getWinningNumbers(latest) }.getOrNull()
+                ?: runCatching { container.resultService720.getWinningNumbers(latest - 1) }.getOrNull()
+            result?.let { _winning.value = it }
             _loadingNumbers.value = false
         }
     }
@@ -60,40 +66,33 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     }
 }
 
-/** 번호 설정: 5슬롯(null=미설정 / emptyList=자동 / [nums]=수동) 읽기·쓰기. */
-class NumberViewModel(private val container: AppContainer) : ViewModel() {
+/**
+ * 구매조건 설정(원 NumberViewModel 대체, Task12): 자동 구매 on/off + 매수(1~5, v1 자동배정 전용).
+ * 720 온라인 구매는 [com.umicorp.autolotto720.dhlottery.Feature720.PURCHASE_ENABLED] 게이트 —
+ * 화면이 배너로 "준비 중"을 알리고 on/off 스위치를 잠근다. 매수 설정은 게이트와 무관하게 저장해
+ * 둔다(게이트가 열리면 그대로 쓰인다).
+ */
+class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() {
     val autoEnabled = container.autoEnabled
-    // 저장 완료 스낵바의 스케줄 문구용(원본 number_screen이 autoPurchaseDay/Hour/Minute 프로바이더를 읽음).
-    val autoPurchaseDay = container.autoPurchaseDay
-    val autoPurchaseHour = container.autoPurchaseHour
-    val autoPurchaseMinute = container.autoPurchaseMinute
+    val autoGames = container.autoGames
 
-    private val _games = MutableStateFlow<List<List<Int>?>>(List(5) { null })
-    val games: StateFlow<List<List<Int>?>> = _games.asStateFlow()
+    fun setAutoEnabled(v: Boolean) { viewModelScope.launch { container.setAutoEnabled(v) } }
 
-    init { loadSavedGames() }
-
-    fun loadSavedGames() {
-        viewModelScope.launch { _games.value = container.loadManualGames() }
-    }
-
-    /** 게임 수는 설정된 슬롯 수로 자동 반영(원본 `_saveConfig`). */
-    fun saveConfig(games: List<List<Int>?>) {
-        _games.value = games
-        viewModelScope.launch { container.saveManualGames(games) }
-    }
+    fun setAutoGames(n: Int) { viewModelScope.launch { container.setAutoGames(n.coerceIn(1, 5)) } }
 }
 
 /**
- * 기록: 로그인 상태면 dhlottery에서 구매내역 라이브 조회(로컬 DB 없음).
+ * 기록(Task13): 로그인 상태면 dhlottery에서 720 구매내역(티켓 단위)을 라이브 조회(로컬 DB 없음).
+ * [com.umicorp.autolotto720.dhlottery.Feature720.PURCHASE_ENABLED]=false인 동안은
+ * [AppContainer.historyService720]가 항상 빈 목록을 반환 — 화면은 빈 상태로 "준비 중"을 알린다.
  *
  * 조회는 3개월 창 단위(동행복권 1회 조회 한도) — 첫 로드는 최근 3개월, "더 보기"가 이전 3개월
  * 창을 이어 붙여 최대 4창(서버 보관 한도 1년)까지 내려간다. 새로고침은 첫 창부터 리셋.
  */
 class HistoryViewModel(private val container: AppContainer) : ViewModel() {
     val isLoggedIn = container.isLoggedIn  // 빈 화면 문구 분기용(원본 isLoggedInProvider watch)
-    private val _purchases = MutableStateFlow<List<Purchase>>(emptyList())
-    val purchases: StateFlow<List<Purchase>> = _purchases.asStateFlow()
+    private val _tickets = MutableStateFlow<List<Ticket720>>(emptyList())
+    val tickets: StateFlow<List<Ticket720>> = _tickets.asStateFlow()
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
     private val _loadingMore = MutableStateFlow(false)
@@ -118,7 +117,7 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
             try {
                 val end = LocalDate.now()
                 val start = end.minusMonths(WINDOW_MONTHS)
-                _purchases.value = container.historyService.fetchPurchases(start, end)
+                _tickets.value = container.historyService720.fetchPurchases(start, end)
                     .sortedByDescending { it.round }
                 oldestStart = start
                 windowsLoaded = 1
@@ -140,8 +139,8 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
             try {
                 val end = oldestStart.minusDays(1)
                 val start = end.minusMonths(WINDOW_MONTHS)
-                val more = container.historyService.fetchPurchases(start, end)
-                _purchases.value = (_purchases.value + more).sortedByDescending { it.round }
+                val more = container.historyService720.fetchPurchases(start, end)
+                _tickets.value = (_tickets.value + more).sortedByDescending { it.round }
                 oldestStart = start
                 windowsLoaded++
                 if (windowsLoaded >= MAX_WINDOWS) _canLoadMore.value = false
@@ -231,6 +230,8 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         /**
          * 구매 가능 시간 (원본 `_isValidPurchaseTime`). day: 1=월 .. 7=일.
          * 토(6): 06:00~19:59, 그 외(평일/일): 06:00~23:59. (토 20:00~일 05:59 판매정지)
+         * ponytail: 이 하드 검증은 사이트 전반 운영시간 규칙(645 유산) — 720 목요일 마감(17:00) 자체는
+         * 하드 블록이 아니라 SettingsScreen의 인라인 경고(Task14)로만 안내한다.
          */
         fun isValidPurchaseTime(day: Int, hour: Int): Boolean =
             if (day == 6) hour in 6..19 else hour >= 6

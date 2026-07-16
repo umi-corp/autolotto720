@@ -26,8 +26,8 @@ import java.util.Locale
  */
 object Notifications {
 
-    /** 브랜드 틸 — 작은 아이콘·앱 이름 액센트 색상 (아이콘 아트 자체는 기존 ic_launcher 유지). */
-    private const val BRAND_TEAL = 0xFF0F8B8D.toInt()
+    /** 브랜드 그린(Task10 리시드 0xFF1B7F4B) — 작은 아이콘·앱 이름 액센트 색상 (아이콘 아트 자체는 기존 ic_launcher 유지). */
+    private const val BRAND_GREEN = 0xFF1B7F4B.toInt()
 
     private const val CHANNEL_ID = "autolotto720_channel"
     private const val CHANNEL_NAME = "AutoLotto720 알림"
@@ -59,7 +59,7 @@ object Notifications {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentIntent(contentIntent)
             .setSmallIcon(R.mipmap.ic_launcher) // 원본도 @mipmap/ic_launcher를 알림 아이콘으로 사용
-            .setColor(BRAND_TEAL) // 작은 아이콘/앱 이름 액센트에 브랜드 틸 적용
+            .setColor(BRAND_GREEN) // 작은 아이콘/앱 이름 액센트에 브랜드 그린 적용
             .setColorized(false)
             .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher))
             .setContentTitle(title)

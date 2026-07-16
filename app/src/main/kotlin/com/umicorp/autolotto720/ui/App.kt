@@ -77,7 +77,7 @@ import com.umicorp.autolotto720.update.AppUpdater
 import com.umicorp.autolotto720.update.UpdateInfo
 import com.umicorp.autolotto720.ui.screen.HistoryScreen
 import com.umicorp.autolotto720.ui.screen.HomeScreen
-import com.umicorp.autolotto720.ui.screen.NumberScreen
+import com.umicorp.autolotto720.ui.screen.PurchaseSetupScreen
 import com.umicorp.autolotto720.ui.screen.SettingsScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -161,7 +161,7 @@ fun AppShell(pendingTab: MutableStateFlow<String?>? = null) {
                     modifier = screenModifier,
                     onNavigateToNumbers = { scope.launch { pagerState.animateScrollToPage(1) } },
                 )
-                1 -> NumberScreen(modifier = screenModifier)
+                1 -> PurchaseSetupScreen(modifier = screenModifier)
                 2 -> HistoryScreen(modifier = screenModifier)
                 else -> SettingsScreen(
                     modifier = screenModifier,

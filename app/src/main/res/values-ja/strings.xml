@@ -2,7 +2,7 @@
 <!-- ja (원본 app_ja.arb 1:1 포트). -->
 <resources>
     <string name="nav_home">ホーム</string>
-    <string name="nav_numbers">番号</string>
+    <string name="nav_numbers">購入</string>
     <string name="nav_history">履歴</string>
     <string name="nav_settings">設定</string>
     <string name="bottomNavHome">ホーム</string>
@@ -16,7 +16,7 @@
     <string name="autoPurchaseDisabled">自動購入 無効</string>
     <string name="autoPurchaseSchedule">%1$sに自動購入されます</string>
     <string name="enableInSettings">設定で有効にしてください</string>
-    <string name="buttonSetupNumbers">🎯 番号を設定する</string>
+    <string name="buttonSetupNumbers">🎯 購入設定へ</string>
 
     <string name="countdownTitle">第%1$d回 抽選まで</string>
     <string name="countdownDays">日</string>
@@ -30,7 +30,24 @@
 
     <string name="balanceTitle">預り金残高</string>
 
-    <string name="numberSetupTitle">番号設定</string>
+    <!-- 720共通: 組/等級/年金当選金表記 -->
+    <string name="joLabel">第%1$d組</string>
+    <string name="rank6th">6等</string>
+    <string name="rank7th">7等</string>
+    <string name="rankBonus">ボーナス</string>
+    <string name="rankNoWin720">非当選</string>
+    <string name="rankPendingDraw">抽選待ち</string>
+    <string name="prizeAnnuity1st">月700万ウォン×20年</string>
+    <string name="prizeAnnuity2nd">月100万ウォン×10年</string>
+
+    <!-- 購入設定(720) — v1は自動割当のみ、オンライン購入はゲート中(Feature720) -->
+    <string name="purchaseComingSoonTitle">自動購入準備中</string>
+    <string name="purchaseComingSoonDesc">年金くじ720+の購入機能は準備中です。</string>
+    <string name="purchaseGamesCountLabel">口数</string>
+    <string name="purchaseGamesCountHint">毎週自動購入する口数を選択してください（1〜5口）</string>
+    <string name="purchaseManualComingSoon">組・番号の直接指定は今後対応予定です</string>
+
+    <string name="numberSetupTitle">購入設定</string>
     <string name="bannerEnableAutoPurchase">設定で自動購入を有効にしてください</string>
     <string name="numberSetupInstruction">毎週自動購入する番号を設定してください。\n手動番号は毎週固定、自動は毎週ランダム生成されます。</string>
     <string name="modeManual">✏️ 手動</string>
@@ -57,6 +74,7 @@
     <string name="historyLoginToLoad">ログインすると購入履歴を表示します</string>
     <string name="historyLoadError">読み込み失敗: %1$s</string>
     <string name="historyLoadMore">もっと見る</string>
+    <string name="historyComingSoonNote">年金くじ720+の購入機能は準備中です</string>
     <string name="statusPending">確認待ち</string>
     <string name="statusNoWin">落選</string>
     <string name="rankWithEmoji">%1$s 🎉</string>
@@ -92,16 +110,17 @@
     <string name="settingEnableAutoPurchase">自動購入を有効にする</string>
     <string name="hintLoginRequired">ログイン後に利用可能</string>
     <string name="gamesConfigured">%1$dゲーム設定済み</string>
-    <string name="hintChangeInNumberTab">番号設定タブで変更</string>
-    <string name="hintSetupGamesInNumberTab">番号設定タブでゲームを設定してください</string>
+    <string name="hintChangeInNumberTab">購入タブで変更</string>
+    <string name="hintSetupGamesInNumberTab">購入タブで口数を設定してください</string>
     <string name="settingPurchaseDay">購入曜日</string>
     <string name="settingPurchaseTime">購入時間</string>
+    <string name="warningSalesClosedAfter">木曜17時以降は販売終了 — 次回分として購入されます</string>
     <string name="settingBatteryOptimization">バッテリー最適化を除外</string>
     <string name="hintBatteryOptimization">定時実行のため推奨</string>
 
     <string name="settingPurchaseNoti">購入完了通知</string>
     <string name="settingResultNoti">当選結果通知</string>
-    <string name="notificationResultTime">毎週土曜日 21:00</string>
+    <string name="notificationResultTime">毎週木曜日 21:00</string>
 
     <string name="settingVersion">バージョン</string>
     <string name="settingOpenSource">オープンソース</string>

@@ -52,6 +52,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -321,6 +322,22 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
                             }
                         },
                     )
+                    // 판매 마감 안내(Task14 R1 F11): 목요일 17시 이후는 다음 회차로 구매됨 — 하드 블록 아님, 안내만.
+                    if (day == THURSDAY && hour >= SALES_CLOSE_HOUR) {
+                        HorizontalDivider()
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Rounded.WarningAmber, null, tint = LgAmber, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                stringResource(R.string.warningSalesClosedAfter),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     HorizontalDivider()
                     // 배터리 최적화 제외(원본 _requestBatteryOptimization).
                     ListItem(
@@ -753,6 +770,10 @@ private fun requestIgnoreBatteryOptimizations(context: Context) {
         Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")),
     )
 }
+
+/** 720 판매 마감 안내 상수(Task14) — day: 1=월 .. 7=일, 목=4. 실제 하드 가드는 AutoPurchaseWorker(Task9). */
+private const val THURSDAY = 4
+private const val SALES_CLOSE_HOUR = 17
 
 private const val URL_CHARGE = "https://www.dhlottery.co.kr/mypage/mndpChrg"
 private const val URL_OPENSOURCE = "https://github.com/umi-corp/autolotto"

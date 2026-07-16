@@ -2,7 +2,7 @@
 <!-- en (원본 app_en.arb 1:1 포트). -->
 <resources>
     <string name="nav_home">Home</string>
-    <string name="nav_numbers">Numbers</string>
+    <string name="nav_numbers">Purchase</string>
     <string name="nav_history">History</string>
     <string name="nav_settings">Settings</string>
     <string name="bottomNavHome">Home</string>
@@ -16,7 +16,7 @@
     <string name="autoPurchaseDisabled">Auto Purchase Disabled</string>
     <string name="autoPurchaseSchedule">Auto purchase at %1$s</string>
     <string name="enableInSettings">Enable in Settings</string>
-    <string name="buttonSetupNumbers">🎯 Set Up Numbers</string>
+    <string name="buttonSetupNumbers">🎯 Set Up Purchase</string>
 
     <string name="countdownTitle">Draw #%1$d in</string>
     <string name="countdownDays">D</string>
@@ -30,7 +30,24 @@
 
     <string name="balanceTitle">Deposit Balance</string>
 
-    <string name="numberSetupTitle">Number Setup</string>
+    <!-- 720 common: group/rank/annuity prize wording -->
+    <string name="joLabel">Group %1$d</string>
+    <string name="rank6th">6th</string>
+    <string name="rank7th">7th</string>
+    <string name="rankBonus">Bonus</string>
+    <string name="rankNoWin720">Not Won</string>
+    <string name="rankPendingDraw">Awaiting Draw</string>
+    <string name="prizeAnnuity1st">₩7,000,000/month × 20 years</string>
+    <string name="prizeAnnuity2nd">₩1,000,000/month × 10 years</string>
+
+    <!-- Purchase setup(720) — v1 auto-assign only, online purchase is gated (Feature720) -->
+    <string name="purchaseComingSoonTitle">Auto Purchase Coming Soon</string>
+    <string name="purchaseComingSoonDesc">Pension Lottery 720+ purchase is coming soon.</string>
+    <string name="purchaseGamesCountLabel">Number of Tickets</string>
+    <string name="purchaseGamesCountHint">Choose how many tickets to auto-purchase weekly (1–5)</string>
+    <string name="purchaseManualComingSoon">Manual group/number selection is coming soon</string>
+
+    <string name="numberSetupTitle">Purchase Setup</string>
     <string name="bannerEnableAutoPurchase">Please enable auto purchase in Settings</string>
     <string name="numberSetupInstruction">Set numbers for weekly auto purchase.\nManual numbers are fixed weekly, auto numbers are randomly generated.</string>
     <string name="modeManual">✏️ Manual</string>
@@ -57,6 +74,7 @@
     <string name="historyLoginToLoad">Login to load purchase history</string>
     <string name="historyLoadError">Load failed: %1$s</string>
     <string name="historyLoadMore">Load More</string>
+    <string name="historyComingSoonNote">Pension Lottery 720+ purchase is coming soon</string>
     <string name="statusPending">Pending</string>
     <string name="statusNoWin">No Win</string>
     <string name="rankWithEmoji">%1$s 🎉</string>
@@ -92,16 +110,17 @@
     <string name="settingEnableAutoPurchase">Enable Auto Purchase</string>
     <string name="hintLoginRequired">Login required</string>
     <string name="gamesConfigured">%1$d games configured</string>
-    <string name="hintChangeInNumberTab">Change in Numbers tab</string>
-    <string name="hintSetupGamesInNumberTab">Set up games in Numbers tab</string>
+    <string name="hintChangeInNumberTab">Change in Purchase tab</string>
+    <string name="hintSetupGamesInNumberTab">Set ticket count in Purchase tab</string>
     <string name="settingPurchaseDay">Purchase Day</string>
     <string name="settingPurchaseTime">Purchase Time</string>
+    <string name="warningSalesClosedAfter">After 17:00 on Thursday, sales are closed — purchase applies to the next round</string>
     <string name="settingBatteryOptimization">Disable Battery Optimization</string>
     <string name="hintBatteryOptimization">Recommended for on-time execution</string>
 
     <string name="settingPurchaseNoti">Purchase Notification</string>
     <string name="settingResultNoti">Result Notification</string>
-    <string name="notificationResultTime">Every Saturday 21:00</string>
+    <string name="notificationResultTime">Every Thursday 21:00</string>
 
     <string name="settingVersion">Version</string>
     <string name="settingOpenSource">Open Source</string>

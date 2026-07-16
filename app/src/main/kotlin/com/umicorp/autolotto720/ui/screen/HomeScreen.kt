@@ -15,7 +15,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,6 +61,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.umicorp.autolotto720.R
+import com.umicorp.autolotto720.data.WinningNumbers720
+import com.umicorp.autolotto720.dhlottery.Round720
 import com.umicorp.autolotto720.ui.appViewModel
 import com.umicorp.autolotto720.ui.theme.CountdownNumberStyle
 import com.umicorp.autolotto720.ui.theme.LgAmber
@@ -73,11 +74,11 @@ import com.umicorp.autolotto720.ui.theme.MotionSpecs
 import com.umicorp.autolotto720.ui.util.formatNumber
 import com.umicorp.autolotto720.ui.util.formatPurchaseSchedule
 import com.umicorp.autolotto720.ui.util.launchActivitySafely
+import com.umicorp.autolotto720.ui.util.localizedJoLabel
 import com.umicorp.autolotto720.ui.vm.HomeViewModel
 import kotlinx.coroutines.delay
-import java.time.DayOfWeek
 import java.time.Duration
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 
 /**
  * 홈 화면 — Lucky Gloss (Material 3 Expressive) 리디자인.
@@ -152,25 +153,18 @@ fun HomeScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Unit) {
     }
 }
 
-/** 다음 토요일 20:45까지 남은 시간(기기 로컬시각, 원본 _updateCountdown 1:1). */
-private fun durationUntilDraw(now: LocalDateTime): Duration {
-    var date = now.toLocalDate()
-    while (date.dayOfWeek != DayOfWeek.SATURDAY) date = date.plusDays(1)
-    var draw = date.atTime(20, 45)
-    if (now.isAfter(draw)) draw = draw.plusWeeks(1)
-    return Duration.between(now, draw)
-}
-
 @Composable
 private fun CountdownHero(round: Int) {
-    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    // 목요일 19:05 추첨(KST 고정) 까지 남은 시간 — Round720.getDrawDate가 회차→추첨일(항상 목요일) 단일소스.
+    var now by remember { mutableStateOf(ZonedDateTime.now(Round720.KST)) }
     LaunchedEffect(Unit) {
         while (true) {
-            now = LocalDateTime.now()
+            now = ZonedDateTime.now(Round720.KST)
             delay(1000)
         }
     }
-    val left = durationUntilDraw(now)
+    val draw = Round720.getDrawDate(round).atTime(19, 5).atZone(Round720.KST)
+    val left = Duration.between(now, draw).let { if (it.isNegative) Duration.ZERO else it }
     val days = left.toDays()
     val hours = left.toHours() % 24
     val mins = left.toMinutes() % 60
@@ -240,7 +234,7 @@ private fun PopIn(index: Int, key: Any, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun WinningNumbers(winning: com.umicorp.autolotto720.data.WinningResult?, loading: Boolean) {
+private fun WinningNumbers(winning: WinningNumbers720?, loading: Boolean) {
     Column {
         SectionHeader(
             // 이모지는 R.string에 이미 포함(🏆 …) — 코드에서 덧붙이면 중복 표시
@@ -259,33 +253,20 @@ private fun WinningNumbers(winning: com.umicorp.autolotto720.data.WinningResult?
                             strokeWidth = 2.dp,
                         )
                         1 -> winning?.let { w ->
-                            // 좁은 기기(유효 폭 ≤400dp, 예: 갤럭시 기본 384dp)에서 38dp 고정 볼이
-                            // 카드 폭을 넘어 보너스 볼이 잘림 — 가용 폭에 맞춰 볼 크기 축소.
-                            // 하한 없음: 극단 폭(분할 화면 등)에서도 잘리는 대신 계속 줄어든다.
-                            BoxWithConstraints {
-                                val plusWidth = 20.dp
-                                val balls = w.numbers.size + 1 // 본번호 + 보너스
-                                val ball = ((maxWidth - plusWidth - 6.dp * balls) / balls)
-                                    .coerceIn(0.dp, 38.dp)
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    w.numbers.forEachIndexed { i, n ->
-                                        PopIn(index = i, key = w.round) { LottoBall(n, size = ball) }
-                                    }
-                                    // 고정 폭 슬롯 — 폰트 스케일이 커져도 산식이 예약한 폭과 어긋나지 않게
-                                    Box(Modifier.width(plusWidth), contentAlignment = Alignment.Center) {
-                                        Text(
-                                            "+",
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1,
-                                        )
-                                    }
-                                    PopIn(index = w.numbers.size, key = w.round) {
-                                        LottoBall(w.bonus, size = ball, bordered = true)
-                                    }
+                            // 720은 볼 그리드가 아니라 조+6자리 표기 — 1등 번호 + 보너스(조 무관) 두 줄.
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                PopIn(index = 0, key = w.round) {
+                                    JoNumberDisplay(joLabel = localizedJoLabel(w.jo), number = w.number)
+                                }
+                                PopIn(index = 1, key = w.round) {
+                                    JoNumberDisplay(
+                                        joLabel = stringResource(R.string.rankBonus),
+                                        number = w.bonusNumber,
+                                        accent = LgGold,
+                                    )
                                 }
                             }
                         }

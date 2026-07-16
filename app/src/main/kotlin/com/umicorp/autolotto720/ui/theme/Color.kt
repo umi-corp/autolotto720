@@ -7,18 +7,18 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Lucky Gloss 디자인 토큰 (Material 3 Expressive). 벽지 dynamic color 대신 고정 스킴을 쓴다.
- * 로또 공 색은 여기 없다 — 항상 com.umicorp.autolotto720.ui.util.ballColor(n) 재사용.
+ * 720 전환(Task10) — primary 시드를 그린 계열(0xFF1B7F4B)로 리시드.
  */
 
 // 캔버스 / 표면
 val LgCream = Color(0xFFF6F1E7)          // 배경 크림
 val LgSurface = Color(0xFFFFFFFF)        // 프로스트 카드
 val LgSurfaceLow = Color(0xFFFCFAF5)     // 낮은 표면
-val LgSurfaceVariant = Color(0xFFECE6D9) // 중립 표면(미선택 공 등)
+val LgSurfaceVariant = Color(0xFFECE6D9) // 중립 표면
 
-// 브랜드
-val LgTeal = Color(0xFF0F8B8D)           // primary
-val LgTealInk = Color(0xFF0B6E70)        // deep teal accent
+// 브랜드 (Task10: 그린 시드 0xFF1B7F4B)
+val LgTeal = Color(0xFF1B7F4B)           // primary
+val LgTealInk = Color(0xFF11543A)        // deep green accent(primary 파생)
 val LgGold = Color(0xFFF5B301)           // secondary
 val LgGreen = Color(0xFF6FBF3B)          // tertiary
 val LgAmber = Color(0xFFE9930B)          // warning
@@ -46,7 +46,7 @@ fun heroGradient(): Brush = Brush.linearGradient(
 val LightColors = lightColorScheme(
     primary = LgTeal,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFB9E7E7),
+    primaryContainer = Color(0xFFBFE8CB),
     onPrimaryContainer = LgTealInk,
     secondary = LgGold,
     onSecondary = Color(0xFF3A2E00),
@@ -75,10 +75,10 @@ val LightColors = lightColorScheme(
 
 // 다크: Lucky Gloss 팔레트를 어둡게 변주(테마 일관성 유지).
 val DarkColors = darkColorScheme(
-    primary = Color(0xFF62D6D6),
-    onPrimary = Color(0xFF00373A),
+    primary = Color(0xFF7FDDA0),
+    onPrimary = Color(0xFF00391D),
     primaryContainer = LgTealInk,
-    onPrimaryContainer = Color(0xFFB9E7E7),
+    onPrimaryContainer = Color(0xFFBFE8CB),
     secondary = LgGold,
     onSecondary = Color(0xFF3A2E00),
     tertiary = Color(0xFF9BD97A),
