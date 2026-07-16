@@ -202,17 +202,19 @@ class AppContainer(context: Context) {
     // === "번호" 탭 설정 (§10 마이그레이션·§3 sanitize) ===
 
     /**
-     * 저장 JSON → 설정. 없으면 구 매수(AUTO_GAMES)에서 마이그레이션(앞 N슬롯 FullAuto), 그것도 없으면 빈 설정.
-     * 손상/미지 스키마는 [NumberConfig720.fromJson]이 안전 기본값으로 떨어뜨린다. 구매 동의는 승계하지 않는다.
+     * 저장 JSON → 설정. 없으면 빈 설정(초기설정은 게임 없음 — 구 매수 마이그레이션 폐기, 사용자 피드백).
+     * 일회성 정리: rev=1이고 수동/반자동 슬롯이 없는 저장본 = 구버전 "매수→전부자동" 마이그레이션 산출물 →
+     * 빈 설정으로 교체 영속화. 직접 저장본은 rev≥2라 보존된다(수동 저장은 항상 마이그레이션 이후 발생).
+     * 손상/미지 스키마는 [NumberConfig720.fromJson]이 안전 기본값으로 떨어뜨린다.
      */
     private fun loadNumberConfig(): NumberConfig720 {
-        NumberConfig720.fromJson(store.getNumberConfig())?.let { return it }
-        val legacyGames = store.getAutoGames()
-        if (legacyGames <= 0) return NumberConfig720.empty()
-        // 마이그레이션분을 1회 영속화 → 이후 단일 출처가 되고, 화면 saved 표기가 정합(미영속인데 저장됨 오표기 방지).
-        val migrated = NumberConfig720.migrateFromAutoGames(legacyGames)
-        store.setNumberConfig(migrated.toJson())
-        return migrated
+        val saved = NumberConfig720.fromJson(store.getNumberConfig()) ?: return NumberConfig720.empty()
+        if (saved.revision == 1L && saved.slots.none { it is Slot720.SemiAuto || it is Slot720.Manual }) {
+            val reset = NumberConfig720.empty().copy(revision = saved.revision + 1)  // 단조 증가 유지
+            store.setNumberConfig(reset.toJson())
+            return reset
+        }
+        return saved
     }
 
     /**

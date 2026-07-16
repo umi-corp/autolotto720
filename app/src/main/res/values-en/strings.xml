@@ -71,8 +71,8 @@
     <string name="gameSummarySemiAuto">Group %1$d · auto number</string>
     <string name="gameSummaryManual">Group %1$d  %2$s</string>
     <string name="fallbackPolicyLabel">If the number is taken</string>
-    <string name="fallbackKeepGroup">Keep group · reassign number</string>
-    <string name="fallbackReassignAll">Reassign group and number</string>
+    <string name="fallbackReassignAll">Auto-assign group and number</string>
+    <string name="fallbackKeepGroup">Keep group · auto-assign number</string>
     <string name="fallbackGiveUp">Give up</string>
     <string name="buttonSaveGames">Save %1$d games</string>
     <string name="buttonSaveEmpty">Save (no purchase)</string>
@@ -157,7 +157,7 @@
     <string name="buttonReset2">Reset</string>
 
     <string name="errorInvalidPurchaseTime">Current time is not valid for the selected day. Please change the time first.</string>
-    <string name="errorPurchaseTimeRestriction">Cannot purchase at this time.\nWeekday/Sun: 06:00~23:59, Sat: 06:00~19:59</string>
+    <string name="errorPurchaseTimeRestriction">Cannot purchase at this time.\nThu 17:00–Fri 00:00 sales are closed</string>
     <string name="snackbarBatteryAlreadyExcluded">✅ Already excluded from battery optimization</string>
     <string name="snackbarBatteryManualDisable">Please disable battery optimization in app settings</string>
     <string name="errorBatterySettings">Cannot open battery settings: %1$s</string>

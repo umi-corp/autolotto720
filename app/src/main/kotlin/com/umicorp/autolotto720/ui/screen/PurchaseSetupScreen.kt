@@ -120,7 +120,7 @@ private const val GROUP_AUTO = 0    // [자동] = FullAuto (번호도 자동 강
 // committed 확정본이 프로세스 사망(회전·강제종료)에도 살아남게 rememberSaveable로 승격(확정≠저장, 영속 store와 별개).
 // 기존 NumberConfig720 JSON 직렬화를 재사용 — 슬롯 5개만 실어 나른다(fallback/revision은 별도 saveable).
 private val SlotListSaver: Saver<SnapshotStateList<Slot720>, String> = Saver(
-    save = { NumberConfig720(it.toList(), FallbackPolicy.KEEP_GROUP_RANDOM, NumberConfig720.CURRENT_SCHEMA, 0L).toJson() },
+    save = { NumberConfig720(it.toList(), FallbackPolicy.REASSIGN_ALL, NumberConfig720.CURRENT_SCHEMA, 0L).toJson() },
     restore = { json ->
         val slots = NumberConfig720.fromJson(json)?.slots ?: List(5) { Slot720.Unset }
         mutableStateListOf(*slots.toTypedArray())
@@ -161,7 +161,7 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
         mutableStateListOf<Int?>(null, null, null, null, null, null)  // nullable = 미입력(≠0)
     }
     var activeDigit by rememberSaveable { mutableStateOf(0) }
-    var fallback by rememberSaveable { mutableStateOf(FallbackPolicy.KEEP_GROUP_RANDOM) }  // enum=Serializable → autoSaver
+    var fallback by rememberSaveable { mutableStateOf(FallbackPolicy.REASSIGN_ALL) }  // enum=Serializable → autoSaver
     var saved by rememberSaveable { mutableStateOf(true) }
 
     val snackbar = remember { SnackbarHostState() }
@@ -370,7 +370,9 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                     enabled = !locked,
                     onSelect = { sel ->
                         groupSel = sel
-                        if (sel == GROUP_AUTO) numberManual = false  // 조 자동 → 번호 수동 불가(불변식)
+                        // 조 자동 → 번호 수동 불가(불변식). 고정 조 선택은 항상 수동부터 시작 —
+                        // 자동은 유저가 원할 때 토글(사용자 피드백, 조를 바꿀 때마다 수동 리셋).
+                        numberManual = sel != GROUP_AUTO
                     },
                 )
                 Spacer(Modifier.height(16.dp))
@@ -401,7 +403,15 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                                     digits[activeDigit] = n
                                     activeDigit = ((activeDigit + 1)..5).firstOrNull { digits[it] == null } ?: activeDigit
                                 },
-                                onBackspace = { digits[activeDigit] = null },
+                                onBackspace = {
+                                    // 현재 칸이 비어 있으면 앞 칸으로 이동하며 지운다 — 연속 삭제(사용자 피드백).
+                                    if (digits[activeDigit] != null) {
+                                        digits[activeDigit] = null
+                                    } else if (activeDigit > 0) {
+                                        activeDigit -= 1
+                                        digits[activeDigit] = null
+                                    }
+                                },
                                 applyEnabled = manualComplete && !locked,
                                 onApplyAll = { triggerApplyToAll() },
                             )
@@ -998,24 +1008,24 @@ private fun GameSummary(committed: List<Slot720>, currentSlot: Int, onRemove: (I
     }
 }
 
-/** 폴백 정책 선택기(§6) — 조 유지 재배정(기본) / 조+번호 재배정 / 포기. */
+/** 폴백 정책 선택기(§6) — 조+번호 모두 자동 배정(기본) / 조 유지·번호 자동 배정 / 포기. */
 @Composable
 private fun FallbackSelector(fallback: FallbackPolicy, enabled: Boolean, onSelect: (FallbackPolicy) -> Unit) {
     SectionCard {
         SectionHeader(stringResource(R.string.fallbackPolicyLabel))
         Spacer(Modifier.height(8.dp))
         FallbackRow(
-            text = stringResource(R.string.fallbackKeepGroup),
-            selected = fallback == FallbackPolicy.KEEP_GROUP_RANDOM,
-            enabled = enabled,
-            onClick = { onSelect(FallbackPolicy.KEEP_GROUP_RANDOM) },
-        )
-        Spacer(Modifier.height(8.dp))
-        FallbackRow(
             text = stringResource(R.string.fallbackReassignAll),
             selected = fallback == FallbackPolicy.REASSIGN_ALL,
             enabled = enabled,
             onClick = { onSelect(FallbackPolicy.REASSIGN_ALL) },
+        )
+        Spacer(Modifier.height(8.dp))
+        FallbackRow(
+            text = stringResource(R.string.fallbackKeepGroup),
+            selected = fallback == FallbackPolicy.KEEP_GROUP_RANDOM,
+            enabled = enabled,
+            onClick = { onSelect(FallbackPolicy.KEEP_GROUP_RANDOM) },
         )
         Spacer(Modifier.height(8.dp))
         FallbackRow(

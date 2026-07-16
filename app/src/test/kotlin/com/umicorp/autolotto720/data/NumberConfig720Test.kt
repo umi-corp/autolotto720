@@ -77,24 +77,6 @@ class NumberConfig720Test {
         assertEquals(listOf(0, 0, 0, 7, 2, 7), (restored.slots[0] as Slot720.Manual).digits)
     }
 
-    // === 마이그레이션(§10) ===
-
-    @Test fun migrate_maps_first_n_slots_to_fullauto() {
-        val c = NumberConfig720.migrateFromAutoGames(3)
-        assertEquals(
-            listOf(Slot720.FullAuto, Slot720.FullAuto, Slot720.FullAuto, Slot720.Unset, Slot720.Unset),
-            c.slots,
-        )
-        assertEquals(FallbackPolicy.KEEP_GROUP_RANDOM, c.fallback)
-        assertEquals(1L, c.revision)          // 마이그레이션도 "신규 저장" → revision>0
-        assertEquals(3, c.gameCount)
-    }
-
-    @Test fun migrate_clamps_out_of_range_counts() {
-        assertEquals(5, NumberConfig720.migrateFromAutoGames(9).gameCount)
-        assertEquals(0, NumberConfig720.migrateFromAutoGames(-2).gameCount)
-    }
-
     // === fromJson: 거절·sanitize(§3, §10) ===
 
     @Test fun fromJson_returns_null_on_blank_or_garbage() {
@@ -144,15 +126,16 @@ class NumberConfig720Test {
         assertEquals(5, NumberConfig720.fromJson(long)!!.slots.size)
     }
 
-    @Test fun fromJson_bad_fallback_defaults_to_keep_group() {
+    @Test fun fromJson_bad_fallback_defaults_to_reassign_all() {
         val json = """{"schemaVersion":1,"revision":1,"fallback":"WHAT","slots":[]}"""
-        assertEquals(FallbackPolicy.KEEP_GROUP_RANDOM, NumberConfig720.fromJson(json)!!.fallback)
+        assertEquals(FallbackPolicy.REASSIGN_ALL, NumberConfig720.fromJson(json)!!.fallback)
     }
 
     @Test fun empty_is_all_unset_no_games() {
         val e = NumberConfig720.empty()
         assertEquals(0, e.gameCount)
         assertEquals(0L, e.revision)
+        assertEquals(FallbackPolicy.REASSIGN_ALL, e.fallback)   // 기본 폴백 = 조+번호 모두 자동 배정
         assertTrue(e.slots.all { it == Slot720.Unset })
     }
 }

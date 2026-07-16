@@ -40,9 +40,19 @@ import com.umicorp.autolotto720.ui.theme.MotionSpecs
 import com.umicorp.autolotto720.ui.theme.ctaGradient
 import com.umicorp.autolotto720.ui.theme.heroGradient
 
+// 동행복권 연금복권720+ 공식 볼 팔레트 — 흰 볼 + 자리별 색 테두리(사이트 CSS --d-wf-1n~6n 실측값).
+private val PensionDigitRings = listOf(
+    Color(0xFFDE4C0E), // 십만
+    Color(0xFFF08200), // 만
+    Color(0xFFF3C00F), // 천
+    Color(0xFF2A9BDB), // 백
+    Color(0xFFA87AD7), // 십
+    Color(0xFFADB0BA), // 일
+)
+
 /**
- * 조+6자리 번호 표시 (홈 당첨번호 · 내역 티켓 공유, Task11/13). 원 [n]볼 그리드(LottoBall, 645
- * 1~45)를 대체한다 — 720은 "조(1~5) + 6자리 문자열" 표기라 볼 그리드 개념이 없다.
+ * 조+6자리 번호 표시 (홈 당첨번호 · 내역 티켓 공유, Task11/13). 6자리는 동행복권 연금복권720+
+ * 공식 컨셉의 원형 볼(흰 배경 + 자리별 색 테두리)로 렌더링한다(사용자 피드백 — 밋밋한 숫자 대체).
  * [joLabel]은 호출부가 이미 로컬라이즈해 넘긴다(`ui.util.localizedJoLabel`/`rankBonus` 등).
  */
 @Composable
@@ -63,13 +73,31 @@ fun JoNumberDisplay(
             Text(joLabel, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
         }
         Spacer(Modifier.width(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            number.forEachIndexed { i, ch ->
+                PensionBall(digit = ch, ring = PensionDigitRings.getOrElse(i) { PensionDigitRings.last() })
+            }
+        }
+    }
+}
+
+/** 연금복권 공식 스타일 볼 1개 — 흰 원 + 색 테두리 + 볼드 숫자. */
+@Composable
+private fun PensionBall(digit: Char, ring: Color) {
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .clip(CircleShape)
+            .background(Color.White)
+            .border(2.5.dp, ring, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
         Text(
-            number,
-            fontFamily = FontFamily.Monospace,
+            digit.toString(),
             fontWeight = FontWeight.Bold,
-            letterSpacing = 3.sp,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 15.sp,
+            // 테마 무관 고정 네이비 — 흰 볼 위 가독성(공식 사이트 검정 숫자에 대응하는 브랜드 톤).
+            color = Color(0xFF1E2D50),
         )
     }
 }

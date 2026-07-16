@@ -71,8 +71,8 @@
     <string name="gameSummarySemiAuto">第%1$d組・番号自動</string>
     <string name="gameSummaryManual">第%1$d組  %2$s</string>
     <string name="fallbackPolicyLabel">番号が売り切れの場合</string>
-    <string name="fallbackKeepGroup">組を維持・番号再割当</string>
-    <string name="fallbackReassignAll">組+番号を再割当</string>
+    <string name="fallbackReassignAll">組+番号を自動割当</string>
+    <string name="fallbackKeepGroup">組を維持・番号を自動割当</string>
     <string name="fallbackGiveUp">購入をあきらめる</string>
     <string name="buttonSaveGames">%1$dゲーム保存</string>
     <string name="buttonSaveEmpty">保存（購入なし）</string>
@@ -157,7 +157,7 @@
     <string name="buttonReset2">初期化</string>
 
     <string name="errorInvalidPurchaseTime">現在の設定時間ではこの曜日に購入できません。先に時間を変更してください。</string>
-    <string name="errorPurchaseTimeRestriction">この時間帯は購入できません。\n平日/日: 06:00~23:59、土: 06:00~19:59</string>
+    <string name="errorPurchaseTimeRestriction">この時間帯は購入できません。\n木17:00〜金00:00は販売終了時間帯です</string>
     <string name="snackbarBatteryAlreadyExcluded">✅ すでにバッテリー最適化から除外されています</string>
     <string name="snackbarBatteryManualDisable">アプリ設定でバッテリー最適化を手動で解除してください</string>
     <string name="errorBatterySettings">バッテリー設定を開けません: %1$s</string>

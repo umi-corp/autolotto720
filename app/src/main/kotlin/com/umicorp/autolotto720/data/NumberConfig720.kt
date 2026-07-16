@@ -35,10 +35,10 @@ sealed interface Slot720 {
 }
 
 /**
- * 점유(매진) 실패 폴백 정책 (설계 §6). 조 유지 재배정(기본) / 조+번호 모두 재배정 / 포기(스킵).
+ * 점유(매진) 실패 폴백 정책 (설계 §6). 조+번호 모두 자동 배정(기본) / 조 유지·번호 자동 배정 / 포기(스킵).
  * 직렬화는 name 기반([FallbackPolicy.valueOf]) — 멤버 추가는 하위호환, 순서 변경도 무해.
  */
-enum class FallbackPolicy { KEEP_GROUP_RANDOM, REASSIGN_ALL, GIVE_UP }
+enum class FallbackPolicy { REASSIGN_ALL, KEEP_GROUP_RANDOM, GIVE_UP }
 
 /**
  * "번호" 탭 저장 설정 (설계 §3, §10). [slots]는 항상 5개(A~E).
@@ -72,9 +72,9 @@ data class NumberConfig720(
         /** 현재 스키마 버전. 미지(미래) 버전은 휴리스틱 파싱 금지 → 안전 기본값으로 떨어뜨린다. */
         const val CURRENT_SCHEMA = 1
 
-        /** 전부 Unset·기본 폴백·revision 0(구매 안 함). */
+        /** 전부 Unset·기본 폴백·revision 0(구매 안 함). 초기설정은 게임 없음 — A 게임부터 직접 설정. */
         fun empty(): NumberConfig720 =
-            NumberConfig720(List(5) { Slot720.Unset }, FallbackPolicy.KEEP_GROUP_RANDOM, CURRENT_SCHEMA, 0L)
+            NumberConfig720(List(5) { Slot720.Unset }, FallbackPolicy.REASSIGN_ALL, CURRENT_SCHEMA, 0L)
 
         /**
          * 저장 JSON → 설정. 손상·미지 스키마·범위 밖 값은 **거절/안전화**(설계 §3, §10):
@@ -90,7 +90,7 @@ data class NumberConfig720(
             if (schema != CURRENT_SCHEMA) return empty()   // 미지 버전: 휴리스틱 파싱 금지
             val revision = obj.optLong("revision", 0L).coerceAtLeast(0L)
             val fallback = runCatching { FallbackPolicy.valueOf(obj.optString("fallback")) }
-                .getOrDefault(FallbackPolicy.KEEP_GROUP_RANDOM)
+                .getOrDefault(FallbackPolicy.REASSIGN_ALL)
             val arr = obj.optJSONArray("slots")
             val slots = MutableList<Slot720>(5) { Slot720.Unset }
             if (arr != null) {
@@ -99,17 +99,6 @@ data class NumberConfig720(
                 }
             }
             return NumberConfig720(slots, fallback, CURRENT_SCHEMA, revision)
-        }
-
-        /**
-         * 구 설정 마이그레이션(설계 §10): number config 없고 기존 매수 N>0이면
-         * **앞 N슬롯 FullAuto, 나머지 Unset**, 폴백=기본. 구매 동의는 미승계(현재 동의 개념 없음).
-         */
-        fun migrateFromAutoGames(autoGames: Int): NumberConfig720 {
-            val n = autoGames.coerceIn(0, 5)
-            val slots = List(5) { if (it < n) Slot720.FullAuto else Slot720.Unset }
-            // revision 1: 마이그레이션도 "신규 저장"이라 0보다 커야 이후 단조 증가가 성립.
-            return NumberConfig720(slots, FallbackPolicy.KEEP_GROUP_RANDOM, CURRENT_SCHEMA, 1L)
         }
 
         private fun slotToJson(slot: Slot720): JSONObject = JSONObject().apply {

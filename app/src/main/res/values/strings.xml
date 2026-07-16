@@ -76,8 +76,8 @@
     <string name="gameSummarySemiAuto">%1$d조 · 번호 자동</string>
     <string name="gameSummaryManual">%1$d조  %2$s</string>
     <string name="fallbackPolicyLabel">점유 실패 시</string>
-    <string name="fallbackKeepGroup">조 유지 · 번호 재배정</string>
-    <string name="fallbackReassignAll">조+번호 모두 재배정</string>
+    <string name="fallbackReassignAll">조+번호 모두 자동 배정</string>
+    <string name="fallbackKeepGroup">조 유지 · 번호 자동 배정</string>
     <string name="fallbackGiveUp">구매 포기</string>
     <string name="buttonSaveGames">%1$d게임 저장</string>
     <string name="buttonSaveEmpty">저장 (구매 안 함)</string>
@@ -164,7 +164,7 @@
     <string name="buttonReset2">초기화</string>
 
     <string name="errorInvalidPurchaseTime">현재 설정된 시간이 해당 요일에 구매 불가합니다. 시간을 먼저 변경해주세요.</string>
-    <string name="errorPurchaseTimeRestriction">해당 시간에는 구매할 수 없습니다.\n평일/일: 06:00~23:59, 토: 06:00~19:59</string>
+    <string name="errorPurchaseTimeRestriction">해당 시간에는 구매할 수 없습니다.\n목 17:00~금 00:00은 판매 마감 시간대입니다</string>
     <string name="snackbarBatteryAlreadyExcluded">✅ 이미 배터리 최적화에서 제외되어 있습니다</string>
     <string name="snackbarBatteryManualDisable">앱 설정에서 배터리 최적화를 직접 해제해주세요</string>
     <string name="errorBatterySettings">배터리 최적화 설정을 열 수 없습니다: %1$s</string>
