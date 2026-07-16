@@ -34,7 +34,7 @@ object AlarmTimes {
         return targetToday.plusDays(daysUntil.toLong()).toInstant().toEpochMilli()
     }
 
-    /** 다음 토요일 21:00(epoch millis). 원본의 결과확인 고정 시각(토 21:00). Dart saturday=6. */
-    fun nextSaturday21Millis(now: ZonedDateTime): Long =
-        nextAutoPurchaseMillis(DayOfWeek.SATURDAY.value, 21, 0, now)
+    /** 다음 목요일 21:00(epoch millis). 연금복권720+ 추첨(목 19:05) 후 결과확인 슬롯. */
+    fun nextThursday21Millis(now: ZonedDateTime): Long =
+        nextAutoPurchaseMillis(DayOfWeek.THURSDAY.value, 21, 0, now)
 }

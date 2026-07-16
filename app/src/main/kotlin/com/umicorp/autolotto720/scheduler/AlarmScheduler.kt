@@ -37,10 +37,10 @@ class AlarmScheduler(private val context: Context) {
         setExact(REQ_PURCHASE, triggerAt, AutoPurchaseReceiver::class.java)
     }
 
-    /** 결과확인 알람(1002) 등록 — 다음 토요일 21:00 고정. */
+    /** 결과확인 알람(1002) 등록 — 다음 목요일 21:00 고정. */
     fun scheduleCheckResult() {
         val now = ZonedDateTime.now(ZoneId.systemDefault())
-        val triggerAt = AlarmTimes.nextSaturday21Millis(now)
+        val triggerAt = AlarmTimes.nextThursday21Millis(now)
         setExact(REQ_CHECK_RESULT, triggerAt, CheckResultReceiver::class.java)
     }
 

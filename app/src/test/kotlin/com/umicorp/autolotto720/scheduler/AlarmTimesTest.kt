@@ -63,30 +63,30 @@ class AlarmTimesTest {
         assertEquals(millis(kst(2026, 6, 29, 9, 0)), AlarmTimes.nextAutoPurchaseMillis(1, 9, 0, now))
     }
 
-    // ---------- 토요일 21:00 고정 (결과확인) ----------
+    // ---------- 목요일 21:00 고정 (결과확인) ----------
 
     @Test
-    fun `next saturday 21 from sunday is upcoming saturday`() {
+    fun `next thursday 21 from sunday is upcoming thursday`() {
         val now = kst(2026, 6, 28, 10, 0) // 일요일
-        assertEquals(millis(kst(2026, 7, 4, 21, 0)), AlarmTimes.nextSaturday21Millis(now))
+        assertEquals(millis(kst(2026, 7, 2, 21, 0)), AlarmTimes.nextThursday21Millis(now))
     }
 
     @Test
-    fun `next saturday 21 same saturday before 21 fires today`() {
-        val now = kst(2026, 7, 4, 20, 0)
-        assertEquals(DayOfWeek.SATURDAY, now.dayOfWeek)
-        assertEquals(millis(kst(2026, 7, 4, 21, 0)), AlarmTimes.nextSaturday21Millis(now))
+    fun `next thursday 21 same thursday before 21 fires today`() {
+        val now = kst(2026, 7, 16, 20, 0)
+        assertEquals(DayOfWeek.THURSDAY, now.dayOfWeek)
+        assertEquals(millis(kst(2026, 7, 16, 21, 0)), AlarmTimes.nextThursday21Millis(now))
     }
 
     @Test
-    fun `next saturday 21 same saturday after 21 rolls to next saturday`() {
-        val now = kst(2026, 7, 4, 21, 30)
-        assertEquals(millis(kst(2026, 7, 11, 21, 0)), AlarmTimes.nextSaturday21Millis(now))
+    fun `next thursday 21 same thursday after 21 rolls to next thursday`() {
+        val now = kst(2026, 7, 16, 21, 30)
+        assertEquals(millis(kst(2026, 7, 23, 21, 0)), AlarmTimes.nextThursday21Millis(now))
     }
 
     @Test
-    fun `next saturday 21 exactly 21 fires now`() {
-        val now = kst(2026, 7, 4, 21, 0)
-        assertEquals(millis(now), AlarmTimes.nextSaturday21Millis(now))
+    fun `next thursday 21 exactly 21 fires now`() {
+        val now = kst(2026, 7, 16, 21, 0)
+        assertEquals(millis(now), AlarmTimes.nextThursday21Millis(now))
     }
 }
