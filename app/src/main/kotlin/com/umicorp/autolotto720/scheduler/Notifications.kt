@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.umicorp.autolotto720.MainActivity
 import com.umicorp.autolotto720.R
+import com.umicorp.autolotto720.data.Rank720
 import com.umicorp.autolotto720.data.SecureStore
 import java.time.LocalDate
 import java.util.Locale
@@ -79,6 +80,35 @@ object Notifications {
 
     /** 천단위 콤마 — 원본 `_formatPrize`/`_formatNumber`의 수동 콤마 삽입과 동일(로케일 고정 콤마). */
     fun formatThousands(n: Long): String = String.format(Locale.US, "%,d", n)
+
+    /**
+     * 연금복권720+ 등수 → 한글 라벨(DESIGN §연금복권720+ 룰). PENDING(추첨 대기)은 CheckResultWorker가
+     * [com.umicorp.autolotto720.data.RankChecker720]로 로컬 재계산해 넘기므로 알림에는 사실상 등장하지 않는다.
+     */
+    fun rank720Label(rank: Rank720): String = when (rank) {
+        Rank720.FIRST -> "1등"
+        Rank720.SECOND -> "2등"
+        Rank720.THIRD -> "3등"
+        Rank720.FOURTH -> "4등"
+        Rank720.FIFTH -> "5등"
+        Rank720.SIXTH -> "6등"
+        Rank720.SEVENTH -> "7등"
+        Rank720.BONUS -> "보너스"
+        Rank720.NONE -> "미당첨"
+        Rank720.PENDING -> "추첨 대기"
+    }
+
+    /** 등수 → 당첨금 표기. 1·2등·보너스는 연금식("월 …×N년" 고정액), 3~7등은 고정 일시금, 그 외는 빈 문자열. */
+    fun rank720PrizeText(rank: Rank720): String = when (rank) {
+        Rank720.FIRST -> "월 700만원×20년"
+        Rank720.SECOND, Rank720.BONUS -> "월 100만원×10년"
+        Rank720.THIRD -> "100만원"
+        Rank720.FOURTH -> "10만원"
+        Rank720.FIFTH -> "5만원"
+        Rank720.SIXTH -> "5천원"
+        Rank720.SEVENTH -> "1천원"
+        Rank720.NONE, Rank720.PENDING -> ""
+    }
 }
 
 /**

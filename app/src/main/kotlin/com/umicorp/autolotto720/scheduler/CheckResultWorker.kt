@@ -3,18 +3,25 @@ package com.umicorp.autolotto720.scheduler
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.umicorp.autolotto720.data.Rank720
+import com.umicorp.autolotto720.data.RankChecker720
 import com.umicorp.autolotto720.data.SecureStore
+import com.umicorp.autolotto720.data.Ticket720
+import com.umicorp.autolotto720.data.WinningNumbers720
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
-import com.umicorp.autolotto720.dhlottery.HistoryService
-import com.umicorp.autolotto720.dhlottery.PurchaseService
-import com.umicorp.autolotto720.dhlottery.ResultService
+import com.umicorp.autolotto720.dhlottery.HistoryService720
+import com.umicorp.autolotto720.dhlottery.ResultService720
+import com.umicorp.autolotto720.dhlottery.Round720
 
 /**
- * 당첨확인 백그라운드 작업 (원본 `_onCheckResultAlarm` + `_executeCheckResult` 포트).
+ * 당첨확인 백그라운드 작업 — 연금복권720+ 포트 (원본 `_onCheckResultAlarm`/645 CheckResultWorker 기반).
  *
- * 당첨번호 조회(로그인 불필요) → 로그인 → 구매이력 조회 → 게임별 당첨/낙첨 알림(원본 문구) →
- * 끝에서 결과확인 알람(1002, 고정 토 21:00) 자가재등록.
+ * 당첨번호 조회(로그인 불필요, 결과확인은 라이브 — Task6) → 로그인 → 구매이력 조회(현재는 구매 게이트로
+ * 항상 빈 목록 — Task8) → 매칭 티켓별 당첨/낙첨 알림 → 끝에서 결과확인 알람(1002, 고정 목 21:00) 자가재등록.
+ *
+ * 회차는 [Round720.getLatestCompletedRound]다 — 이 워커는 목 21:00(추첨 19:05 이후)에 돌므로
+ * "지금 판매 중" 회차가 아니라 "방금 추첨된" 회차를 확인해야 한다(645의 "현재 판매 회차"와의 핵심 차이).
  */
 class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -23,7 +30,7 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
 
     override suspend fun doWork(): Result {
         val lastAttempt = runAttemptCount >= MAX_ATTEMPTS - 1
-        // 결과 미게시·미추첨 반영 지연·일시 네트워크 오류는 재시도(backoff 15분 선형)로 흡수하고,
+        // 결과 미게시·일시 네트워크 오류는 재시도(backoff 15분 선형)로 흡수하고,
         // 시도 소진 시에만 실패를 알린다 — 침묵 종료·낙첨 오보 방지.
         val done = try {
             executeCheckResult(lastAttempt)
@@ -42,75 +49,102 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
         return if (done) Result.success() else Result.retry()
     }
 
-    /** 원본 `_executeCheckResult` 기반. @return true=완결, false=미확정(재시도 필요). */
+    /** 원본 `_executeCheckResult` 기반. @return true=완결(성공/폴백/무동작), false=미확정(재시도 필요). */
     private suspend fun executeCheckResult(lastAttempt: Boolean): Boolean {
         if (!store.getAutoEnabled()) return true
 
-        // 당첨번호 조회 (로그인 불필요 — 자체 세션). 실패/미게시 시 null → 재시도.
-        val winning = ResultService().getWinningNumbers() ?: return false
-        // 직전 추첨 회차(현재 판매 회차-1)보다 오래된 결과 = 아직 미게시 → 재시도. 지난 회차 재통지 방지.
-        if (winning.round < PurchaseService.getCurrentRound() - 1) return false
-        val winningLine = "당첨번호: ${winning.numbers.joinToString(", ")} + ${winning.bonus}"
+        val round = Round720.getLatestCompletedRound()
+        // 당첨번호 미게시(null) → 재시도. 결과확인은 로그인 불필요 — 자체 세션(Task6, 라이브).
+        val winning = ResultService720().getWinningNumbers(round) ?: return false
 
-        // 로그인 → 구매이력 조회 → 매칭 결과 알림
-        try {
+        // 로그인 → 구매이력 조회. 실패(로그인/네트워크 등)는 마지막 시도 전까지 재시도.
+        val tickets: List<Ticket720> = try {
             val cred = store.getCredentials()
-            val userId = cred.userId
-            val password = cred.password
-            if (userId == null || password == null) throw Exception("no_credentials")
+            val userId = cred.userId ?: throw Exception("no_credentials")
+            val password = cred.password ?: throw Exception("no_credentials")
 
             val session = DhlotterySession()
             val auth = AuthService(session)
             auth.login(userId, password)
 
-            val history = HistoryService(session)
-            val purchases = history.fetchRecentPurchases(count = 5)
-            val purchase = purchases.firstOrNull { it.round == winning.round }
-                ?: throw Exception("no_matching_purchase")
-            // 추첨 결과가 티켓에 아직 반영되지 않았으면(drawed=false, gameRanks=pending)
-            // '낙첨'으로 오보하지 않고 재시도한다.
-            if (!purchase.checked) throw Exception("not_drawn_yet")
-
-            // 게임별 결과 텍스트 생성
-            val rankNames = mapOf(
-                "rank1" to "1등", "rank2" to "2등", "rank3" to "3등",
-                "rank4" to "4등", "rank5" to "5등", "nowin" to "낙첨",
-            )
-
-            val gameLines = purchase.numbers.mapIndexed { i, nums ->
-                val numsStr = nums.joinToString(",")
-                val rank = purchase.gameRanks?.getOrNull(i) ?: "nowin"
-                val rankText = rankNames[rank] ?: "낙첨"
-                "${'A' + i}: $numsStr → $rankText"
-            }
-
-            val isWinner = purchase.rank != null && purchase.rank != "nowin"
-            val title = if (isWinner) "🎉 제 ${winning.round}회 당첨!!!" else "😔 제 ${winning.round}회 낙첨..."
-
-            var body = "$winningLine\n\n${gameLines.joinToString("\n")}"
-            if (isWinner && purchase.prize > 0) {
-                body += "\n\n총 당첨금: ₩${Notifications.formatThousands(purchase.prize)}"
-            }
-
-            Notifications.show(ctx, title, body, 2, tab = Notifications.TAB_HISTORY)
-            return true
+            HistoryService720(session, ResultService720(session)).fetchRecentPurchases()
         } catch (e: Exception) {
-            // 미구매(no_matching_purchase)는 재시도 무의미 → 즉시 당첨번호만 알리고 완결(기존 폴백).
-            // 그 외(미추첨·로그인·이력 조회 실패)는 재시도하고, 마지막 시도에만 같은 폴백을 보낸다.
-            if (e.message != "no_matching_purchase" && !lastAttempt) return false
-            Notifications.show(
-                ctx,
-                "🎱 제 ${winning.round}회 당첨번호",
-                "${winning.numbers.joinToString(", ")} + ${winning.bonus}",
-                2,
-                tab = Notifications.TAB_HISTORY,
-            )
-            return true
+            if (!lastAttempt) return false
+            emptyList() // 마지막 시도 — 매칭 없음으로 취급해 당첨번호만 폴백 알림
         }
+
+        val (title, body) = when (val outcome = resolveCheckOutcome(winning, tickets, round)) {
+            // 방어적 분기 — winning은 위에서 이미 non-null을 확인했으므로 이 갈래는 도달하지 않는다.
+            is CheckOutcome.Retry -> return false
+            is CheckOutcome.NoMatch -> buildFallbackNotification(round, outcome.winning)
+            is CheckOutcome.Matched -> buildMatchedNotification(round, outcome.winning, outcome.tickets)
+        }
+        Notifications.show(ctx, title, body, 2, tab = Notifications.TAB_HISTORY)
+        return true
     }
 
     private companion object {
-        /** 총 시도 횟수(최초 1 + 재시도 3) — 토 21:00 기준 15분 선형 backoff로 ~22:30까지 커버. */
+        /** 총 시도 횟수(최초 1 + 재시도 3) — 목 21:00 기준 15분 선형 backoff로 ~22:30까지 커버. */
         const val MAX_ATTEMPTS = 4
     }
+}
+
+/**
+ * 결과확인 순수 판정 결과 — Worker의 I/O(로그인·조회·알림)와 분리해 테스트 가능하게 노출한다.
+ * (Worker 본체는 android.content.Context/SecureStore 의존이라 이 프로젝트의 JVM 단위테스트로는
+ * 직접 인스턴스화할 수 없다 — 645 레이어도 워커 단위테스트가 없는 동일한 제약.)
+ */
+internal sealed interface CheckOutcome {
+    /** 당첨번호 미게시 → 재시도. */
+    data object Retry : CheckOutcome
+
+    /** 해당 회차 매칭 구매 없음 → 당첨번호만 알리고 완결(645 `no_matching_purchase` 폴백과 동일). */
+    data class NoMatch(val winning: WinningNumbers720) : CheckOutcome
+
+    /** 매칭 티켓 있음(PENDING은 로컬 재계산 완료) → 등수 포함 알림. */
+    data class Matched(val winning: WinningNumbers720, val tickets: List<Ticket720>) : CheckOutcome
+}
+
+/**
+ * [allTickets] 중 [round] 매칭분을 찾아 판정한다. 매칭 티켓의 등수가 PENDING이면(히스토리 상세가
+ * 아직 추첨결과를 반영하지 못한 경우) "추첨 대기"로 통지하는 대신 [winning]으로 로컬 재계산한다(R2 N4).
+ */
+internal fun resolveCheckOutcome(
+    winning: WinningNumbers720?,
+    allTickets: List<Ticket720>,
+    round: Int,
+): CheckOutcome {
+    if (winning == null) return CheckOutcome.Retry
+    val matched = allTickets.filter { it.round == round }
+    if (matched.isEmpty()) return CheckOutcome.NoMatch(winning)
+    val resolved = matched.map { t ->
+        if (t.rank == Rank720.PENDING) t.copy(rank = RankChecker720.rankOf(t.jo, t.number, winning)) else t
+    }
+    return CheckOutcome.Matched(winning, resolved)
+}
+
+/** 매칭 티켓별 조+번호·등수·당첨금 알림 문구(제목, 본문). */
+internal fun buildMatchedNotification(round: Int, winning: WinningNumbers720, tickets: List<Ticket720>): Pair<String, String> {
+    val winningLine = "당첨번호: ${winning.jo}조 ${winning.number} + 보너스 ${winning.bonusNumber}"
+    val gameLines = tickets.joinToString("\n") { t ->
+        val rank = t.rank ?: Rank720.NONE
+        val label = Notifications.rank720Label(rank)
+        val prizeText = Notifications.rank720PrizeText(rank)
+        val suffix = if (prizeText.isEmpty()) "" else " ($prizeText)"
+        "${t.jo}조 ${t.number} → $label$suffix"
+    }
+    val isWinner = tickets.any { (it.rank ?: Rank720.NONE) != Rank720.NONE }
+    val title = if (isWinner) "🎉 제 ${round}회 당첨!!!" else "😔 제 ${round}회 낙첨..."
+    var body = "$winningLine\n\n$gameLines"
+    // 3~7등(일시금)만 합산 — 1·2등·보너스는 연금식이라 단일 총액이 아니라 위 라인의 문구로 표기.
+    val lumpSum = tickets.filter { it.prize > 0 }.sumOf { it.prize }
+    if (lumpSum > 0) body += "\n\n총 당첨금(일시금): ₩${Notifications.formatThousands(lumpSum)}"
+    return title to body
+}
+
+/** 매칭 구매 없음(또는 조회 실패 마지막 시도) 폴백 — 당첨번호만 알림(제목, 본문). */
+internal fun buildFallbackNotification(round: Int, winning: WinningNumbers720): Pair<String, String> {
+    val title = "🎱 제 ${round}회 당첨번호"
+    val body = "${winning.jo}조 ${winning.number} + 보너스 ${winning.bonusNumber}"
+    return title to body
 }
