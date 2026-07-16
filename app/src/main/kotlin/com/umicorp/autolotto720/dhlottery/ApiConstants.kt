@@ -26,8 +26,11 @@ object ApiConstants {
     // 진입: TotalGame.jsp?LottoId=LP72 → game.jsp 로 el JSESSIONID(암호화 passphrase) 발급.
     const val TOTAL_GAME_720 = "/game/TotalGame.jsp?LottoId=LP72"
     const val GAME720 = "/game/pension720/game.jsp"
-    // 4단계 구매 플로우(모두 q=암호문 POST). makeOrderNo까지 무결제 예약, connPro가 실결제.
+    // 구매 플로우(모두 q=암호문 POST). makeOrderNo까지 무결제 예약, connPro가 실결제.
+    // 자동/반자동: makeAutoNo(번호 배정) → makeOrderNo → connPro.
+    // 수동(지정번호): checkVerifyNo(번호 검증·점유 확인) → makeOrderNo → connPro.
     const val MAKE_AUTO_NO_720 = "/makeAutoNo.do"
+    const val CHECK_VERIFY_NO_720 = "/checkVerifyNo.do"
     const val MAKE_ORDER_NO_720 = "/makeOrderNo.do"
     const val CONN_PRO_720 = "/connPro.do"
 

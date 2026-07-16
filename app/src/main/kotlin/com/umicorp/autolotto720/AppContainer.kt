@@ -183,11 +183,14 @@ class AppContainer(context: Context) {
     suspend fun debugPurchaseOne(): String = withContext(Dispatchers.IO) {
         if (!_isLoggedIn.value) return@withContext "로그인 후 시도하세요"
         try {
-            val result = PurchaseService720(auth, session).purchase(games = 1)
+            // 번호 탭에 설정된 게임이 있으면 그대로(수동/반자동/전부자동), 없으면 반자동 1매로 계약만 검증.
+            val svc = PurchaseService720(auth, session)
+            val config = _numberConfig.value
+            val result = if (config.gameCount > 0) svc.purchase(config) else svc.purchase(games = 1)
             refreshBalance()
-            val t = result.tickets.firstOrNull()
-            if (t != null) "구매 성공: ${t.jo}조 ${t.number} (${result.round}회, ₩${result.amount})"
-            else "구매 응답에 티켓 정보 없음 (내역 확인 필요)"
+            if (result.tickets.isEmpty()) "구매 응답에 티켓 정보 없음 (내역 확인 필요)"
+            else "구매 성공: " + result.tickets.joinToString(", ") { "${it.jo}조 ${it.number}" } +
+                " (${result.round}회, ₩${result.amount})"
         } catch (e: Exception) {
             "구매 실패: ${e.message}"
         }

@@ -471,12 +471,12 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
                         modifier = Modifier.clickable(enabled = isLoggedIn && !debugBusy) { showDebugPurchase = true },
                         colors = transparentListColors(),
                         leadingContent = { SettingIcon(Icons.Rounded.ConfirmationNumber, LgAmber) },
-                        headlineContent = { Text("테스트 구매 1매 (실결제 ₩1,000)", fontWeight = FontWeight.Bold) },
+                        headlineContent = { Text("설정대로 테스트 구매 (실결제)", fontWeight = FontWeight.Bold) },
                         supportingContent = {
                             Text(
                                 if (!isLoggedIn) "로그인 후 사용 가능"
                                 else if (debugBusy) "구매 진행 중…"
-                                else "감독 하 반자동 1매 실구매 — el AES 계약 검증",
+                                else "감독 하 실구매 — 번호 탭 설정대로(없으면 반자동 1매)",
                             )
                         },
                     )
@@ -491,7 +491,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
         AlertDialog(
             onDismissRequest = { showDebugPurchase = false },
             title = { Text("테스트 구매 확인", fontWeight = FontWeight.Bold) },
-            text = { Text("반자동 1매를 실제로 구매합니다. 예치금에서 ₩1,000이 차감되며 되돌릴 수 없습니다. 진행할까요?") },
+            text = { Text("번호 탭 설정대로 실제 구매합니다(설정 없으면 반자동 1매). 예치금에서 게임당 ₩1,000이 차감되며 되돌릴 수 없습니다. 진행할까요?") },
             confirmButton = {
                 TextButton(onClick = {
                     showDebugPurchase = false

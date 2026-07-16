@@ -1,5 +1,8 @@
 package com.umicorp.autolotto720.dhlottery
 
+import com.umicorp.autolotto720.data.FallbackPolicy
+import com.umicorp.autolotto720.data.NumberConfig720
+import com.umicorp.autolotto720.data.Slot720
 import com.umicorp.autolotto720.data.Ticket720
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -35,31 +38,60 @@ class PurchaseService720(
     private val elHost: String get() = session.elUrl.toHttpUrl().host
 
     /**
-     * 반자동 [games]게임 구매(조 1..5 순환, 번호 자동배정). 게임 수(1~5)는 네트워크보다 먼저 검증.
-     * 각 게임은 makeAutoNo→makeOrderNo→connPro 1사이클(connPro 성공이 다음 게임의 "구매 진행중" 락을 해제).
+     * 번호 탭 설정([NumberConfig720]) 기반 구매 — 슬롯별 조/번호를 그대로 산다.
+     *  - [Slot720.FullAuto] → 조·번호 모두 자동(조는 슬롯 위치로 1..5 분산)
+     *  - [Slot720.SemiAuto] → 조 고정, 번호 자동배정
+     *  - [Slot720.Manual]   → 조+지정번호. 점유(매진) 시 [NumberConfig720.fallback] 정책 적용.
      */
+    suspend fun purchase(config: NumberConfig720): PurchaseResult720 = withContext(Dispatchers.IO) {
+        val specs = config.slots.mapIndexedNotNull { i, slot ->
+            when (slot) {
+                Slot720.Unset -> null
+                Slot720.FullAuto -> GameSpec.Auto(jo = (i % 5) + 1)
+                is Slot720.SemiAuto -> GameSpec.Auto(jo = slot.group)
+                is Slot720.Manual -> GameSpec.Manual(jo = slot.group, digits = slot.digits)
+            }
+        }
+        if (specs.isEmpty()) throw DhlotteryException("구매할 게임이 없습니다 (번호 탭에서 설정하세요)")
+        if (specs.size > 5) throw DhlotteryException("온라인 구매 한도는 5게임입니다 (현재: ${specs.size})")
+        purchaseGames(specs, config.fallback)
+    }
+
+    /** 반자동 [games]게임(조 1..5 순환, 번호 자동배정) 구매 — 감독 테스트/워커 브리지용 간이 진입점. */
     suspend fun purchase(games: Int): PurchaseResult720 = withContext(Dispatchers.IO) {
         if (games !in 1..5) throw DhlotteryException("게임 수는 1~5개여야 합니다. (현재: $games)")
-        purchaseGames(List(games) { GameSpec(jo = (it % 5) + 1) })
+        purchaseGames(List(games) { GameSpec.Auto(jo = (it % 5) + 1) }, FallbackPolicy.REASSIGN_ALL)
     }
 
-    /** 반자동 게임 스펙 — 조 고정, 번호는 서버 자동배정(수동 지정번호는 별도 검증 슬라이스). */
-    data class GameSpec(val jo: Int) {
-        init { require(jo in 1..5) { "조는 1~5여야 합니다: $jo" } }
+    /** 구매 게임 스펙 — 자동/반자동(조 고정, 번호 자동)과 수동(조+지정번호). */
+    sealed interface GameSpec {
+        val jo: Int
+        data class Auto(override val jo: Int) : GameSpec {
+            init { require(jo in 1..5) { "조는 1~5여야 합니다: $jo" } }
+        }
+        data class Manual(override val jo: Int, val digits: List<Int>) : GameSpec {
+            init {
+                require(jo in 1..5) { "조는 1~5여야 합니다: $jo" }
+                require(digits.size == 6 && digits.all { it in 0..9 }) { "번호는 6자리(0~9)여야 합니다: $digits" }
+            }
+            val number: String get() = digits.joinToString("")
+        }
     }
 
-    private suspend fun purchaseGames(specs: List<GameSpec>): PurchaseResult720 {
+    private suspend fun purchaseGames(specs: List<GameSpec>, fallback: FallbackPolicy): PurchaseResult720 {
         require(specs.size in 1..5) { "게임 수는 1~5개여야 합니다: ${specs.size}" }
         // 세션 확립(el JSESSIONID 발급) + USER_ID 추출을 먼저 — freeze는 그 다음이어야 game.jsp 쿠키가 저장된다.
         val userId = establishGameSession()
         if (elJsessionId() == null) throw DhlotteryException("게임 세션 확립 실패 (로그인 상태를 확인하세요)")
 
-        // 이후 구매 4단계 동안 el JSESSIONID 고정 — 서버가 응답에서 회전시켜도 주문(makeOrderNo)과 결제(connPro)가
+        // 이후 구매 동안 el JSESSIONID 고정 — 서버가 응답에서 회전시켜도 주문(makeOrderNo)과 결제(connPro)가
         // 같은 세션에 묶이게 한다(회전 시 주문 유실 방지). 브라우저 동작과 동일.
         session.cookies.freeze("JSESSIONID")
         try {
             val round = Round720.getUpcomingDrawRound(ZonedDateTime.now(clock))
-            val tickets = specs.map { purchaseOneGame(round, it, userId) }
+            // GIVE_UP 폴백으로 스킵된 게임은 null → 제외. connPro 성공이 다음 게임의 "구매 진행중" 락을 해제.
+            val tickets = specs.mapNotNull { purchaseOneGame(round, it, userId, fallback) }
+            if (tickets.isEmpty()) throw DhlotteryException("구매된 게임이 없습니다 (지정번호 점유 후 '구매 포기' 정책)")
             return PurchaseResult720(round, tickets, tickets.size * UNIT_PRICE)
         } finally {
             session.cookies.unfreeze("JSESSIONID")
@@ -80,48 +112,99 @@ class PurchaseService720(
         return userId
     }
 
-    /** 단품(₩1,000) 1게임: 배정→예약(무결제)→결제(단발). connPro 결과불명/실패는 예외로 던진다(재시도 금지). */
-    private fun purchaseOneGame(round: Int, spec: GameSpec, userId: String): Ticket720 {
-        // 1) makeAutoNo — 조 반자동 번호 배정 (무결제)
-        val r1 = encStep(ApiConstants.MAKE_AUTO_NO_720, buildPlain(
-            "ROUND" to round.toString(), "SEL_NO" to "", "BUY_CNT" to "",
-            "AUTO_SEL_SET" to "S", "SEL_CLASS" to spec.jo.toString(), "BUY_TYPE" to "A", "ACCS_TYPE" to "01",
-        ))
-        requireSuccess(r1, "번호 배정")
-        val jo = r1.optString("selClsNo").split(",").first().ifBlank { spec.jo.toString() }
-        val number = r1.optString("selLotNo").split(",").first()
-        require(number.matches(Regex("\\d{6}"))) { "배정 번호 형식 오류: $number" }
+    /**
+     * 1게임 구매. 자동/반자동은 makeAutoNo로 번호 배정, 수동은 checkVerifyNo로 지정번호 점유 확인.
+     * 수동 지정번호가 점유(매진)면 [fallback]에 따라 스킵(null)·같은 조 자동·조까지 자동으로 대체한다.
+     * makeOrderNo까지 무결제, connPro가 단발 실결제(재시도 금지). GIVE_UP 스킵 시 null 반환.
+     */
+    private fun purchaseOneGame(round: Int, spec: GameSpec, userId: String, fallback: FallbackPolicy): Ticket720? {
+        return when (spec) {
+            is GameSpec.Auto -> {
+                val (jo, number) = assignAuto(round, spec.jo)
+                buyNumber(round, jo, number, userId, manual = false)
+            }
+            is GameSpec.Manual -> {
+                if (verifyManualAvailable(round, spec.jo, spec.number)) {
+                    buyNumber(round, spec.jo.toString(), spec.number, userId, manual = true)
+                } else when (fallback) {
+                    FallbackPolicy.GIVE_UP -> null   // 점유 → 이 게임 스킵
+                    FallbackPolicy.KEEP_GROUP_RANDOM -> {  // 조 유지, 번호 자동 재배정
+                        val (jo, number) = assignAuto(round, spec.jo)
+                        buyNumber(round, jo, number, userId, manual = false)
+                    }
+                    FallbackPolicy.REASSIGN_ALL -> {  // 조+번호 모두 자동 재배정
+                        val (jo, number) = assignAuto(round, (spec.jo % 5) + 1)
+                        buyNumber(round, jo, number, userId, manual = false)
+                    }
+                }
+            }
+        }
+    }
 
-        // 2) makeOrderNo — 주문번호 예약 (무결제)
+    /** makeAutoNo로 [reqJo] 조의 번호를 서버 배정받는다(무결제) → (조, 6자리번호). */
+    private fun assignAuto(round: Int, reqJo: Int): Pair<String, String> {
+        val r = encStep(ApiConstants.MAKE_AUTO_NO_720, buildPlain(
+            "ROUND" to round.toString(), "SEL_NO" to "", "BUY_CNT" to "",
+            "AUTO_SEL_SET" to "S", "SEL_CLASS" to reqJo.toString(), "BUY_TYPE" to "A", "ACCS_TYPE" to "01",
+        ))
+        requireSuccess(r, "번호 배정")
+        val jo = r.optString("selClsNo").split(",").first().ifBlank { reqJo.toString() }
+        val number = r.optString("selLotNo").split(",").first()
+        require(number.matches(Regex("\\d{6}"))) { "배정 번호 형식 오류: $number" }
+        return jo to number
+    }
+
+    /**
+     * 수동 지정번호([number] in 조 [jo])의 구매 가능(비점유) 여부를 checkVerifyNo로 확인한다(무결제).
+     * verifyYn=="Y" 이고 추천(recommendYN=="Y", 이미 점유돼 대체번호 안내) 상태가 아니면 구매 가능.
+     * ⚠️ 이 경로는 라이브 검증 전 — 감독 하 실기기 테스트로 확정 후 게이트를 연다.
+     */
+    private fun verifyManualAvailable(round: Int, jo: Int, number: String): Boolean {
+        val r = encStep(ApiConstants.CHECK_VERIFY_NO_720, buildPlain(
+            "ROUND" to round.toString(), "SEL_NO" to number, "BUY_CNT" to "1",
+            "AUTO_SEL_SET" to "S", "SEL_CLASS" to jo.toString(), "BUY_TYPE" to "M", "ACCS_TYPE" to "01",
+        ))
+        if (r.optString("resultCode") != "100") return false
+        val verified = r.optString("verifyYn").equals("Y", ignoreCase = true)
+        val recommended = r.optString("recommendYN").equals("Y", ignoreCase = true)  // 점유 → 대체 안내
+        return verified && !recommended
+    }
+
+    /**
+     * makeOrderNo(예약, 무결제) → connPro(실결제, 단발) → 발급 티켓. [manual]=true면 수동(buytype=M) 계약.
+     * connPro는 #frm 전체 필드를 브라우저 serialize 순서로 전송해야 서버가 예외 없이 처리한다.
+     */
+    private fun buyNumber(round: Int, jo: String, number: String, userId: String, manual: Boolean): Ticket720 {
+        val buyType = if (manual) "M" else "A"
+        val autoProcess = if (manual) "N" else "Y"
+        val verifyYn = if (manual) "Y" else "N"
+
         val r2 = encStep(ApiConstants.MAKE_ORDER_NO_720, buildPlain(
             "ROUND" to round.toString(), "SEL_NO" to number, "BUY_CNT" to "1",
-            "AUTO_SEL_SET" to "S", "SEL_CLASS" to jo, "BUY_TYPE" to "A", "ACCS_TYPE" to "01",
+            "AUTO_SEL_SET" to "S", "SEL_CLASS" to jo, "BUY_TYPE" to buyType, "ACCS_TYPE" to "01",
         ))
         requireSuccess(r2, "주문 생성")
         val orderNo = r2.optString("orderNo")
         val orderDate = r2.optString("orderDate")
         require(orderNo.isNotBlank() && orderDate.isNotBlank()) { "주문번호 누락" }
 
-        // 3) connPro — 실결제 (단발, 재시도 금지). #frm 전체 필드를 브라우저 serialize 순서대로 전송해야
-        // 서버가 예외 없이 처리한다(BUY_KIND/USER_ID/WORKING_FLAG 등 누락 시 "error ocurred"). 결과불명은 encStep이 예외.
         val r3 = encStep(ApiConstants.CONN_PRO_720, buildPlain(
             "ROUND" to round.toString(), "FLAG" to "", "BUY_KIND" to "01",
-            "BUY_NO" to "$jo$number", "BUY_CNT" to "1", "BUY_SET_TYPE" to "S", "BUY_TYPE" to "A", "ACCS_TYPE" to "01",
+            "BUY_NO" to "$jo$number", "BUY_CNT" to "1", "BUY_SET_TYPE" to "S", "BUY_TYPE" to buyType, "ACCS_TYPE" to "01",
             "orderNo" to orderNo, "orderDate" to orderDate, "TRANSACTION_ID" to "", "WIN_DATE" to "",
             "USER_ID" to userId, "PAY_TYPE" to "",
             "resultErrorCode" to "", "resultErrorMsg" to "", "resultOrderNo" to "",
             "WORKING_FLAG" to "false", "NUM_CHANGE_TYPE" to "",
-            "auto_process" to "Y", "set_type" to "S", "classnum" to jo, "selnum" to number, "buytype" to "A",
+            "auto_process" to autoProcess, "set_type" to "S", "classnum" to jo, "selnum" to number, "buytype" to buyType,
             "num1" to number[0].toString(), "num2" to number[1].toString(), "num3" to number[2].toString(),
             "num4" to number[3].toString(), "num5" to number[4].toString(), "num6" to number[5].toString(),
-            "DSEC" to "0", "CLOSE_DATE" to "", "verifyYN" to "N", "curdeposit" to "0", "curpay" to "1000",
+            "DSEC" to "0", "CLOSE_DATE" to "", "verifyYN" to verifyYn, "curdeposit" to "0", "curpay" to "1000",
         ))
         val code = r3.optString("resultCode")
         if (code !in SUCCESS_CODES) {
             throw DhlotteryException("구매 실패(code=$code): ${r3.optString("resultMsg").ifBlank { r3.optString("resultMessage").ifBlank { "결과 불명 — 내역으로 대조하세요" } }}")
         }
-        // 성공 응답(실측): data.prchsLtNoInfoLstCn = "번호|주문번호|일련번호|회차|조". 실제 발급 티켓을 파싱하고,
-        // 형식이 어긋나면 요청값(배정 조/번호)으로 안전 대체한다.
+        // 성공 응답(실측): data.prchsLtNoInfoLstCn = "번호|주문번호|일련번호|회차|조". 형식 이상 시 요청값 폴백.
         val info = r3.optJSONObject("data")?.optString("prchsLtNoInfoLstCn").orEmpty().split("|")
         val soldNo = info.getOrNull(0)?.takeIf { it.matches(Regex("\\d{6}")) } ?: number
         val soldJo = info.getOrNull(4)?.toIntOrNull()?.takeIf { it in 1..5 } ?: jo.toInt()

@@ -1,5 +1,8 @@
 package com.umicorp.autolotto720.dhlottery
 
+import com.umicorp.autolotto720.data.FallbackPolicy
+import com.umicorp.autolotto720.data.NumberConfig720
+import com.umicorp.autolotto720.data.Slot720
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -130,6 +133,75 @@ class PurchaseService720Test {
         val ex = runCatching { service().purchase(1) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException && ex.message!!.contains("주문 생성"))
         assertEquals(0, connProCount) // 결제 단계 미도달
+    }
+
+    private fun cfg(vararg slots: Slot720, fallback: FallbackPolicy = FallbackPolicy.REASSIGN_ALL) =
+        NumberConfig720(
+            (slots.toList() + List(5) { Slot720.Unset }).take(5),
+            fallback, NumberConfig720.CURRENT_SCHEMA, 1L,
+        )
+
+    /** 수동 지정번호 디스패처. checkVerifyNo가 [available]에 따라 비점유/점유(추천) 응답. */
+    private fun manualDispatcher(available: Boolean, number: String, jo: Int, autoNumber: String = "999999", autoJo: Int = 4) =
+        object : Dispatcher() {
+            override fun dispatch(req: RecordedRequest): MockResponse = when {
+                req.path?.startsWith("/game/TotalGame.jsp") == true -> MockResponse().setBody("ok")
+                req.path == "/game/pension720/game.jsp" ->
+                    MockResponse().setBody("""<input type="hidden" name="USER_ID" value="tester99"/>""")
+                        .addHeader("Set-Cookie", "JSESSIONID=$jses; Path=/")
+                req.path == "/checkVerifyNo.do" ->
+                    enc("""{"resultCode":"100","verifyYn":"Y","recommendYN":"${if (available) "N" else "Y"}"}""")
+                req.path == "/makeAutoNo.do" ->  // 폴백 자동 배정용
+                    enc("""{"resultCode":"100","selClsNo":"$autoJo","selLotNo":"$autoNumber","round":"325"}""")
+                req.path == "/makeOrderNo.do" ->
+                    enc("""{"resultCode":"100","orderNo":"1","orderDate":"2026-07-16 23:03:23"}""")
+                // 수동 가능 → 지정번호 구매, 점유(폴백) → 자동 재배정 번호 구매. (q는 암호문이라 available로 결정)
+                req.path == "/connPro.do" ->
+                    enc(if (available) prchsInfo(number, jo) else prchsInfo(autoNumber, autoJo))
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+
+    @Test
+    fun `config semiauto buys assigned number in chosen group`() = runBlocking {
+        server.dispatcher = happyDispatcher(number = "123456", jo = 2)
+        val r = service().purchase(cfg(Slot720.SemiAuto(2)))
+        assertEquals(1, r.tickets.size)
+        assertEquals(2, r.tickets[0].jo)
+        assertEquals("123456", r.tickets[0].number)
+    }
+
+    @Test
+    fun `config empty throws before network`() = runBlocking {
+        val ex = runCatching { service().purchase(cfg()) }.exceptionOrNull()
+        assertTrue(ex is DhlotteryException && ex.message!!.contains("구매할 게임이 없습니다"))
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `config manual available buys exact number`() = runBlocking {
+        server.dispatcher = manualDispatcher(available = true, number = "111111", jo = 3)
+        val r = service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1))))
+        assertEquals(1, r.tickets.size)
+        assertEquals(3, r.tickets[0].jo)
+        assertEquals("111111", r.tickets[0].number)
+    }
+
+    @Test
+    fun `config manual taken with GIVE_UP skips and throws none purchased`() = runBlocking {
+        server.dispatcher = manualDispatcher(available = false, number = "111111", jo = 3)
+        val ex = runCatching {
+            service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1)), fallback = FallbackPolicy.GIVE_UP))
+        }.exceptionOrNull()
+        assertTrue(ex is DhlotteryException && ex.message!!.contains("구매된 게임이 없습니다"))
+    }
+
+    @Test
+    fun `config manual taken with KEEP_GROUP reassigns auto number`() = runBlocking {
+        server.dispatcher = manualDispatcher(available = false, number = "111111", jo = 3, autoNumber = "888888", autoJo = 3)
+        val r = service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1)), fallback = FallbackPolicy.KEEP_GROUP_RANDOM))
+        assertEquals(1, r.tickets.size)
+        assertEquals("888888", r.tickets[0].number)   // 지정번호 대신 자동 재배정
     }
 
     @Test
