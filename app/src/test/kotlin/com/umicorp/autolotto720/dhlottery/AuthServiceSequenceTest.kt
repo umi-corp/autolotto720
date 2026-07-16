@@ -62,7 +62,7 @@ class AuthServiceSequenceTest {
                     ok("").addHeader("Set-Cookie", "JSESSIONID=test-session-123; Domain=.dhlottery.co.kr; Path=/")
                 }
                 ApiConstants.MAIN -> ok("")
-                ApiConstants.GAME645 -> ok("").addHeader("Set-Cookie", "JSESSIONID=ol-session-456; Path=/")
+                ApiConstants.GAME720 -> ok("").addHeader("Set-Cookie", "JSESSIONID=ol-session-456; Path=/")
                 ApiConstants.BALANCE -> ok(balanceBody)
                 else -> MockResponse().setResponseCode(404)
             }
@@ -75,7 +75,7 @@ class AuthServiceSequenceTest {
 
         assertTrue(result)
         assertTrue(auth.isLoggedIn)
-        assertTrue(server.requestCount >= 7) // main,login,rsa,loginPost,main,game645,verify
+        assertTrue(server.requestCount >= 7) // main,login,rsa,loginPost,main,game720,verify
 
         // 실제 POST된 userId를 개인키로 복호화 → 원문 일치 (RSA가 시퀀스 안에서 정상 동작)
         val body = capturedLoginBody ?: error("login POST 본문 미캡처")
@@ -90,7 +90,7 @@ class AuthServiceSequenceTest {
                 when (request.path?.substringBefore('?')) {
                     ApiConstants.RSA_MODULUS -> rsaOk()
                     ApiConstants.LOGIN -> ok("").addHeader("Set-Cookie", "JSESSIONID=x; Domain=.dhlottery.co.kr; Path=/")
-                    ApiConstants.GAME645 -> ok("").addHeader("Set-Cookie", "JSESSIONID=ol; Path=/")
+                    ApiConstants.GAME720 -> ok("").addHeader("Set-Cookie", "JSESSIONID=ol; Path=/")
                     ApiConstants.BALANCE -> MockResponse().setResponseCode(401) // 검증 실패
                     else -> ok("")
                 }

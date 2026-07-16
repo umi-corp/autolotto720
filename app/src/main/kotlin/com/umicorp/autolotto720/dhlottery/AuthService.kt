@@ -64,9 +64,9 @@ class AuthService(private val session: DhlotterySession) {
                 session.get(session.base(ApiConstants.MAIN), follow = true).close()
             }
 
-            // 5. game645 방문으로 ol 세션 발급 (Dart: 첫 main은 추적 안 함, game645는 추적)
+            // 5. game720 방문으로 ol 세션 발급 (Dart: 첫 main은 추적 안 함, game 페이지는 추적)
             session.get(session.base(ApiConstants.MAIN)).close()
-            session.get(session.ol(ApiConstants.GAME645), follow = true).close()
+            session.get(session.ol(ApiConstants.GAME720), follow = true).close()
 
             // 6. 검증 (mypage 200이면 성공)
             val verified = verifyLogin()
