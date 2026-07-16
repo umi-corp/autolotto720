@@ -384,8 +384,9 @@
       <div class="reel"><div class="strip"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>0</span></div></div>
       <div class="reel"><div class="strip"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>0</span><span>1</span></div></div>
     </div>
-    <!-- 정적 폴백은 특정 버전 에셋 대신 latest 릴리스 페이지 — API 실패·에셋 정리에도 죽지 않는 링크 -->
-    <a href="https://github.com/umi-corp/autolotto720/releases/latest" class="download-btn rise" style="--rd:.6s">
+    <!-- 항상 최신: GitHub 안정 리다이렉트. 에셋은 매 릴리스 고정 이름(autolotto720.apk)으로 업로드.
+         JS가 있으면 정확한 browser_download_url로 갱신, 없거나 API 실패해도 이 링크가 최신 APK를 직접 다운로드 -->
+    <a href="https://github.com/umi-corp/autolotto720/releases/latest/download/autolotto720.apk" class="download-btn rise" style="--rd:.6s">
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.5 13.5L12 19l-5.5-5.5L8 12l2.5 2.5V3h3v11.5L16 12l1.5 1.5zM5 21h14v-2H5v2z"/></svg>
       <span data-i18n="download">APK 다운로드</span>
     </a>

@@ -17,6 +17,9 @@ key.properties
 .omc/
 scratchpad/
 
-key.properties
-*.jks
-autolotto720-key.jks
+# 내부 개발/기획 아티팩트 — 로컬 전용(공개 레포 제외)
+.claude/
+.superpowers/
+docs/superpowers/
+docs/DESIGN.md
+docs/INTERACTION-number-tab.md
