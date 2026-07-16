@@ -1,0 +1,16 @@
+{
+  "resultCode": null,
+  "resultMessage": null,
+  "data": {
+    "result": [
+      { "ltEpsd": 323, "wnRnk": 1, "wnInternetCnt": 1, "wnStoreCnt": 1, "wnTotalCnt": 2, "wnAmt": 1680000000, "totAmt": 3360000000 },
+      { "ltEpsd": 323, "wnRnk": 2, "wnInternetCnt": 4, "wnStoreCnt": 4, "wnTotalCnt": 8, "wnAmt": 480000000, "totAmt": 960000000 },
+      { "ltEpsd": 323, "wnRnk": 3, "wnInternetCnt": 19, "wnStoreCnt": 30, "wnTotalCnt": 49, "wnAmt": 19000000, "totAmt": 49000000 },
+      { "ltEpsd": 323, "wnRnk": 4, "wnInternetCnt": 309, "wnStoreCnt": 357, "wnTotalCnt": 666, "wnAmt": 30900000, "totAmt": 66600000 },
+      { "ltEpsd": 323, "wnRnk": 5, "wnInternetCnt": 3039, "wnStoreCnt": 3552, "wnTotalCnt": 6591, "wnAmt": 151950000, "totAmt": 329550000 },
+      { "ltEpsd": 323, "wnRnk": 6, "wnInternetCnt": 29934, "wnStoreCnt": 33833, "wnTotalCnt": 63767, "wnAmt": 149670000, "totAmt": 318835000 },
+      { "ltEpsd": 323, "wnRnk": 7, "wnInternetCnt": 299043, "wnStoreCnt": 332700, "wnTotalCnt": 631743, "wnAmt": 299043000, "totAmt": 631743000 },
+      { "ltEpsd": 323, "wnRnk": 8, "wnInternetCnt": 5, "wnStoreCnt": 5, "wnTotalCnt": 10, "wnAmt": 600000000, "totAmt": 1200000000 }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "resultCode": null,
+  "resultMessage": null,
+  "data": {
+    "result": [
+      { "psltEpsd": 323, "psltRflYmd": "20260709", "wnBndNo": "4", "wnRnkVl": "604270", "bnsRnkVl": "945893" },
+      { "psltEpsd": 322, "psltRflYmd": "20260702", "wnBndNo": "2", "wnRnkVl": "119392", "bnsRnkVl": "696967" },
+      { "psltEpsd": 321, "psltRflYmd": "20260625", "wnBndNo": "5", "wnRnkVl": "686709", "bnsRnkVl": "326599" },
+      { "psltEpsd": 320, "psltRflYmd": "20260618", "wnBndNo": "5", "wnRnkVl": "766487", "bnsRnkVl": "897760" },
+      { "psltEpsd": 319, "psltRflYmd": "20260611", "wnBndNo": "3", "wnRnkVl": "201327", "bnsRnkVl": "632035" },
+      { "psltEpsd": 314, "psltRflYmd": "20260507", "wnBndNo": "2", "wnRnkVl": "060727", "bnsRnkVl": "293160" }
+    ]
+  }
+}
