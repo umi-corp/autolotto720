@@ -98,30 +98,30 @@ object Notifications {
         Rank720.PENDING -> "추첨 대기"
     }
 
-    /** 등수 → 당첨금 표기. 1·2등·보너스는 연금식("월 …×N년" 고정액), 3~7등은 고정 일시금, 그 외는 빈 문자열. */
+    /** 3~7등 일시금 상품(단일 출처) — 문구와 총액을 한 항목에 함께 정의해 서로 어긋나지 않게 한다. */
+    private data class LumpPrize(val text: String, val amount: Long)
+
+    private val lumpPrizes: Map<Rank720, LumpPrize> = mapOf(
+        Rank720.THIRD to LumpPrize("100만원", 1_000_000),
+        Rank720.FOURTH to LumpPrize("10만원", 100_000),
+        Rank720.FIFTH to LumpPrize("5만원", 50_000),
+        Rank720.SIXTH to LumpPrize("5천원", 5_000),
+        Rank720.SEVENTH to LumpPrize("1천원", 1_000),
+    )
+
+    /** 등수 → 당첨금 표기. 1·2등·보너스는 연금식("월 …×N년" 고정액), 3~7등은 고정 일시금([lumpPrizes]), 그 외는 빈 문자열. */
     fun rank720PrizeText(rank: Rank720): String = when (rank) {
         Rank720.FIRST -> "월 700만원×20년"
         Rank720.SECOND, Rank720.BONUS -> "월 100만원×10년"
-        Rank720.THIRD -> "100만원"
-        Rank720.FOURTH -> "10만원"
-        Rank720.FIFTH -> "5만원"
-        Rank720.SIXTH -> "5천원"
-        Rank720.SEVENTH -> "1천원"
         Rank720.NONE, Rank720.PENDING -> ""
+        else -> lumpPrizes[rank]?.text ?: ""
     }
 
     /**
-     * 등수 → 일시금(원). 3~7등만 단일 총액 합산 대상(1·2등·보너스는 연금식이라 0). [rank720PrizeText]와
-     * 동일 표(단일 출처) — 라인 문구와 총액을 모두 등수에서 파생시켜 어긋나지 않게 한다.
+     * 등수 → 일시금(원). 3~7등만 단일 총액 합산 대상(1·2등·보너스는 연금식이라 0). [lumpPrizes] 단일 출처에서
+     * 파생 — 라인 문구([rank720PrizeText])와 총액을 같은 표에서 읽어 어긋나지 않게 한다.
      */
-    fun lumpSumPrizeOf(rank: Rank720): Long = when (rank) {
-        Rank720.THIRD -> 1_000_000
-        Rank720.FOURTH -> 100_000
-        Rank720.FIFTH -> 50_000
-        Rank720.SIXTH -> 5_000
-        Rank720.SEVENTH -> 1_000
-        else -> 0
-    }
+    fun lumpSumPrizeOf(rank: Rank720): Long = lumpPrizes[rank]?.amount ?: 0
 }
 
 /**

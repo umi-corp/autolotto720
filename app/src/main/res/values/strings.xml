@@ -8,10 +8,6 @@
     <string name="nav_numbers">구매</string>
     <string name="nav_history">내역</string>
     <string name="nav_settings">설정</string>
-    <string name="bottomNavHome">홈</string>
-    <string name="bottomNavNumbers">번호설정</string>
-    <string name="bottomNavHistory">기록</string>
-    <string name="bottomNavSettings">설정</string>
 
     <string name="appTitle">AutoLotto720</string>
 
@@ -61,8 +57,6 @@
     <string name="historyLoadError">조회 실패: %1$s</string>
     <string name="historyLoadMore">더 보기</string>
     <string name="historyComingSoonNote">연금복권720+ 구매 기능은 준비 중입니다</string>
-    <string name="statusPending">확인 대기</string>
-    <string name="statusNoWin">낙첨</string>
     <string name="rankWithEmoji">%1$s 🎉</string>
     <string name="roundLabel">제 %1$d회</string>
     <string name="prizeLabel">당첨금: ₩%1$s</string>
@@ -89,7 +83,6 @@
     <string name="inputUserId">아이디</string>
     <string name="inputPassword">비밀번호</string>
     <string name="buttonCancel">취소</string>
-    <string name="buttonLoggingIn">로그인 중...</string>
 
     <string name="snackbarLoginSuccess">✅ 로그인 성공!</string>
     <string name="snackbarLogoutSuccess">로그아웃 완료</string>

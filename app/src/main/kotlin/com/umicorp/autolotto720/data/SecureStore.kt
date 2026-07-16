@@ -43,7 +43,7 @@ object SecureKeys {
  * - 모든 값을 **문자열**로 저장(불리언="true"/"false", 정수=10진 문자열). 원본 flutter_secure_storage가
  *   문자열만 저장했고, 백그라운드가 raw 키로 읽어 같은 방식으로 파싱하던 패턴을 그대로 유지하기 위함.
  * - 기본값/파싱 규칙도 원본 getter와 동일(미설정 시 day=4(목, 720 추첨일), hour=9, minute=0, threshold=5000,
- *   manual_numbers="[]", language="system" 등).
+ *   language="system" 등).
  *
  * 백그라운드 리시버도 같은 `Context`로 인스턴스를 만들어 직접 읽는다(원본의 백그라운드 isolate 직접읽기 패턴 유지).
  */

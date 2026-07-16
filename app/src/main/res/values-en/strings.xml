@@ -5,10 +5,6 @@
     <string name="nav_numbers">Purchase</string>
     <string name="nav_history">History</string>
     <string name="nav_settings">Settings</string>
-    <string name="bottomNavHome">Home</string>
-    <string name="bottomNavNumbers">Numbers</string>
-    <string name="bottomNavHistory">History</string>
-    <string name="bottomNavSettings">Settings</string>
 
     <string name="appTitle">AutoLotto720</string>
 
@@ -55,8 +51,6 @@
     <string name="historyLoadError">Load failed: %1$s</string>
     <string name="historyLoadMore">Load More</string>
     <string name="historyComingSoonNote">Pension Lottery 720+ purchase is coming soon</string>
-    <string name="statusPending">Pending</string>
-    <string name="statusNoWin">No Win</string>
     <string name="rankWithEmoji">%1$s 🎉</string>
     <string name="roundLabel">Draw #%1$d</string>
     <string name="prizeLabel">Prize: ₩%1$s</string>
@@ -82,7 +76,6 @@
     <string name="inputUserId">User ID</string>
     <string name="inputPassword">Password</string>
     <string name="buttonCancel">Cancel</string>
-    <string name="buttonLoggingIn">Logging in...</string>
 
     <string name="snackbarLoginSuccess">✅ Login successful!</string>
     <string name="snackbarLogoutSuccess">Logged out</string>

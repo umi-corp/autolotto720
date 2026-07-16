@@ -67,7 +67,7 @@ fun SplashScreen(container: AppContainer, onFinished: () -> Unit) {
             Spacer(Modifier.height(24.dp))
             Text("AutoLotto720", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            Text("Lotto 6/45", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp, fontWeight = FontWeight.Light)
+            Text("연금복권720+", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp, fontWeight = FontWeight.Light)
             Spacer(Modifier.height(40.dp))
             CircularProgressIndicator(
                 modifier = Modifier.size(28.dp),

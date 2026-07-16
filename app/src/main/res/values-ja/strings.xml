@@ -5,10 +5,6 @@
     <string name="nav_numbers">購入</string>
     <string name="nav_history">履歴</string>
     <string name="nav_settings">設定</string>
-    <string name="bottomNavHome">ホーム</string>
-    <string name="bottomNavNumbers">番号設定</string>
-    <string name="bottomNavHistory">履歴</string>
-    <string name="bottomNavSettings">設定</string>
 
     <string name="appTitle">AutoLotto720</string>
 
@@ -55,8 +51,6 @@
     <string name="historyLoadError">読み込み失敗: %1$s</string>
     <string name="historyLoadMore">もっと見る</string>
     <string name="historyComingSoonNote">年金くじ720+の購入機能は準備中です</string>
-    <string name="statusPending">確認待ち</string>
-    <string name="statusNoWin">落選</string>
     <string name="rankWithEmoji">%1$s 🎉</string>
     <string name="roundLabel">第%1$d回</string>
     <string name="prizeLabel">当選金: ₩%1$s</string>
@@ -82,7 +76,6 @@
     <string name="inputUserId">ユーザーID</string>
     <string name="inputPassword">パスワード</string>
     <string name="buttonCancel">キャンセル</string>
-    <string name="buttonLoggingIn">ログイン中...</string>
 
     <string name="snackbarLoginSuccess">✅ ログイン成功！</string>
     <string name="snackbarLogoutSuccess">ログアウト完了</string>
