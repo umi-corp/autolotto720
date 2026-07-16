@@ -10,7 +10,6 @@ import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.data.WinningNumbers720
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
-import com.umicorp.autolotto720.dhlottery.Feature720
 import com.umicorp.autolotto720.dhlottery.HistoryService720
 import com.umicorp.autolotto720.dhlottery.ResultService720
 import com.umicorp.autolotto720.dhlottery.Round720
@@ -70,13 +69,9 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
             return true
         }
 
-        // 로그인 → 구매이력 조회. 실패(로그인/네트워크 등)는 마지막 시도 전까지 재시도.
-        // 구매 게이트 오프(Feature720.PURCHASE_ENABLED=false)면 fetchRecentPurchases가 항상 빈 목록이라
-        // 로그인/자격증명/이력조회를 통째로 스킵한다(R2 N3): 무의미한 네트워크·자격증명 사용 제거 + 일시 로그인
-        // 실패가 재시도(최대 ~90분)를 태워 당첨번호 통지를 지연시키는 것 방지. 게이트가 켜지면 아래 경로가 그대로 재개된다.
-        val tickets: List<Ticket720> = if (!Feature720.PURCHASE_ENABLED) {
-            emptyList() // 게이트 오프 — 매칭 없음으로 취급해 당첨번호만 폴백 알림
-        } else try {
+        // 로그인 → 구매이력 조회(읽기전용 — 구매 게이트와 무관). 실패는 마지막 시도 전까지 재시도.
+        // 자격증명 없으면 빈 목록(무의미한 네트워크·재시도 방지). 이력이 있으면 당첨 대조 알림, 없으면 당첨번호만.
+        val tickets: List<Ticket720> = try {
             val cred = store.getCredentials()
             val userId = cred.userId ?: throw Exception("no_credentials")
             val password = cred.password ?: throw Exception("no_credentials")

@@ -166,13 +166,6 @@ private fun EmptyState(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )
-        Spacer(Modifier.height(4.dp))
-        // 720 구매는 게이트 중(Feature720.PURCHASE_ENABLED=false) — 로그인 여부와 무관하게 항상 안내.
-        Text(
-            stringResource(R.string.historyComingSoonNote),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
-        )
         if (error != null) {
             Spacer(Modifier.height(8.dp))
             Text(
