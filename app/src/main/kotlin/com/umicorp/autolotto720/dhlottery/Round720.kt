@@ -75,18 +75,13 @@ object Round720 {
         return getDrawDate(getUpcomingDrawRound(kstNow)) == kstNow.toLocalDate() && kstNow.toLocalTime() >= SALES_CLOSE
     }
 
-    /** 추첨 시각(목 19:05). 판매정지 죽은 창의 끝(=다음 회차 판매 개시). */
-    private const val DRAW_MINUTE_OF_DAY = 19 * 60 + 5   // 19:05
-
     /**
-     * 후보 스케줄이 판매정지 죽은 창(목 17:00~19:05: 마감~추첨)에 드는지 판정 — 벽시계 기준 순수 함수.
-     * `isSalesClosed`(런타임 "지금" 판정)와 달리 저장하려는 (요일,시,분) 후보를 검증한다(R2 N1):
-     * 이 창에 예약하면 워커의 런타임 판매마감 가드가 매주 조용히 스킵해 영구 무구매가 되므로 저장 시점에 막는다.
-     * 목 19:05+ 는 다음 회차 판매라 유효, 목 외 요일·목 17:00 이전은 항상 유효.
+     * 후보 스케줄(요일,시,분)이 설정 금지 창에 드는지 판정 — 벽시계 기준 순수 함수.
+     * 규칙: 목 17:00~23:59 금지(금 00:00부터 다음 회차 판매 개시라 허용). 현 회차는 목 17:00 마감이라
+     * 목 17:00 이후를 스케줄 대상으로 두면 이번 목요일 저녁 내내 무구매가 되므로 저장 시점에 막는다.
+     * `isSalesClosed`(런타임 "지금" 판정)와 독립 — 이건 저장하려는 후보만 검증한다(R2 N1).
+     * minute는 API 호환용(현 규칙은 시 단위 경계).
      */
-    fun isInSalesDeadWindow(day: Int, hour: Int, minute: Int): Boolean {
-        if (day != THURSDAY) return false
-        val minuteOfDay = hour * 60 + minute
-        return minuteOfDay in (SALES_CLOSE.hour * 60 + SALES_CLOSE.minute) until DRAW_MINUTE_OF_DAY
-    }
+    fun isScheduleBlocked(day: Int, hour: Int, minute: Int): Boolean =
+        day == THURSDAY && hour >= SALES_CLOSE.hour
 }

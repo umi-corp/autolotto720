@@ -322,7 +322,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
                             }
                         },
                     )
-                    // 판매 마감 안내(Task14 R1 F11): 목요일 17시 이후는 다음 회차로 구매됨 — 하드 블록 아님, 안내만.
+                    // 설정 불가 안내: 목 17:00~금 00:00은 저장이 하드 블록됨(isValidPurchaseTime). 레거시 저장값 안내용.
                     if (day == THURSDAY && hour >= SALES_CLOSE_HOUR) {
                         HorizontalDivider()
                         Row(

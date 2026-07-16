@@ -94,7 +94,7 @@
     <string name="hintSetupGamesInNumberTab">구매 탭에서 매수를 설정해주세요</string>
     <string name="settingPurchaseDay">구매 요일</string>
     <string name="settingPurchaseTime">구매 시간</string>
-    <string name="warningSalesClosedAfter">목요일 17시 이후는 판매 마감 — 다음 회차로 구매됩니다</string>
+    <string name="warningSalesClosedAfter">목 17:00~금 00:00은 설정 불가 — 판매 마감 시간대</string>
     <string name="settingBatteryOptimization">배터리 최적화 제외</string>
     <string name="hintBatteryOptimization">정시 실행을 위해 권장</string>
 

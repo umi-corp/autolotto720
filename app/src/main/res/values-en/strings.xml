@@ -87,7 +87,7 @@
     <string name="hintSetupGamesInNumberTab">Set ticket count in Purchase tab</string>
     <string name="settingPurchaseDay">Purchase Day</string>
     <string name="settingPurchaseTime">Purchase Time</string>
-    <string name="warningSalesClosedAfter">After 17:00 on Thursday, sales are closed — purchase applies to the next round</string>
+    <string name="warningSalesClosedAfter">Thu 17:00–Fri 00:00 cannot be scheduled — sales are closed</string>
     <string name="settingBatteryOptimization">Disable Battery Optimization</string>
     <string name="hintBatteryOptimization">Recommended for on-time execution</string>
 

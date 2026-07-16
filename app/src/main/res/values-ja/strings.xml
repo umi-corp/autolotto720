@@ -87,7 +87,7 @@
     <string name="hintSetupGamesInNumberTab">購入タブで口数を設定してください</string>
     <string name="settingPurchaseDay">購入曜日</string>
     <string name="settingPurchaseTime">購入時間</string>
-    <string name="warningSalesClosedAfter">木曜17時以降は販売終了 — 次回分として購入されます</string>
+    <string name="warningSalesClosedAfter">木17:00〜金00:00は設定不可 — 販売終了時間帯</string>
     <string name="settingBatteryOptimization">バッテリー最適化を除外</string>
     <string name="hintBatteryOptimization">定時実行のため推奨</string>
 
