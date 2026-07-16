@@ -34,8 +34,11 @@ sealed interface Slot720 {
     }
 }
 
-/** 점유(매진) 실패 폴백 정책 (설계 §6). 조 유지 재배정(기본) / 포기(스킵). */
-enum class FallbackPolicy { KEEP_GROUP_RANDOM, GIVE_UP }
+/**
+ * 점유(매진) 실패 폴백 정책 (설계 §6). 조 유지 재배정(기본) / 조+번호 모두 재배정 / 포기(스킵).
+ * 직렬화는 name 기반([FallbackPolicy.valueOf]) — 멤버 추가는 하위호환, 순서 변경도 무해.
+ */
+enum class FallbackPolicy { KEEP_GROUP_RANDOM, REASSIGN_ALL, GIVE_UP }
 
 /**
  * "번호" 탭 저장 설정 (설계 §3, §10). [slots]는 항상 5개(A~E).

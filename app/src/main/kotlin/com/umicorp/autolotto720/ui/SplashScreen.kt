@@ -60,9 +60,10 @@ fun SplashScreen(container: AppContainer, onFinished: () -> Unit) {
             verticalArrangement = Arrangement.Center,
         ) {
             Image(
-                // ic_launcher는 API26+에서 adaptive-icon XML로 해석됨 → painterResource가 로드 불가(크래시).
-                // 래스터 전경 PNG(네이비+그린 콘텐츠)를 사용. 네이비 스플래시 배경과 톤 일치.
-                painter = painterResource(R.mipmap.ic_launcher_foreground),
+                // 런처 전경(ic_launcher_foreground)은 adaptive 오버스캔용 45% 축소본이라 스플래시에선 콘텐츠가
+                // 너무 작음 → 원본 아이콘 풀사이즈 래스터(splash_logo)를 별도 사용. mipmap ic_launcher는
+                // API26+에서 adaptive-icon XML로 해석돼 painterResource 로드 불가(크래시).
+                painter = painterResource(R.drawable.splash_logo),
                 contentDescription = null,
                 modifier = Modifier.size(120.dp).clip(RoundedCornerShape(28.dp)),
             )

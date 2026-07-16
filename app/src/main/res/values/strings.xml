@@ -51,14 +51,14 @@
     <string name="numberSetupTitle">번호 설정</string>
 
     <!-- "번호" 탭 (수동 게임 설정, 설계 §4~§5) -->
-    <string name="numberSetupInstruction">슬롯 A~E에 조와 번호를 지정하세요 (최대 5게임). 저장은 설정만 보관하며 실제 구매는 준비 중입니다.</string>
+    <string name="numberSetupInstruction">매주 자동 구매할 조와 번호를 설정하세요.\n수동 번호는 매주 고정, 자동은 매주 랜덤 배정됩니다.</string>
     <string name="numberGateBannerDesc">설정은 저장되지만 실제 구매는 준비 중입니다</string>
     <string name="buttonAllAuto">전부 자동</string>
     <string name="rollingAllAuto">자동 배정 중…</string>
     <string name="groupSelectorLabel">조 선택</string>
     <string name="groupAuto">자동</string>
-    <string name="numberModeAuto">자동</string>
-    <string name="numberModeManual">수동</string>
+    <string name="numberModeAuto">🎲 자동</string>
+    <string name="numberModeManual">✏️ 수동</string>
     <string name="pickGroupPrompt">먼저 조를 선택하세요</string>
     <string name="fullAutoCardTitle">완전 자동</string>
     <string name="fullAutoCardDesc">조와 번호 모두 구매 시 서버가 자동 배정합니다</string>
@@ -69,14 +69,15 @@
     <string name="buttonConfirmGame">%1$s 게임 적용</string>
     <string name="buttonReset">초기화</string>
     <string name="duplicateManualError">같은 조·번호가 이미 있습니다</string>
-    <string name="gameSummaryTitle">게임 요약</string>
+    <string name="gameSummaryTitle">📋 게임 설정</string>
     <string name="gameSummaryNotSet">미설정</string>
-    <string name="gameSummarySelecting">선택 중</string>
-    <string name="gameSummaryFullAuto">완전 자동</string>
+    <string name="gameSummarySelecting">지금 설정 중</string>
+    <string name="gameSummaryFullAuto">🎲 자동 (매주 랜덤)</string>
     <string name="gameSummarySemiAuto">%1$d조 · 번호 자동</string>
     <string name="gameSummaryManual">%1$d조  %2$s</string>
     <string name="fallbackPolicyLabel">점유 실패 시</string>
     <string name="fallbackKeepGroup">조 유지 · 번호 재배정</string>
+    <string name="fallbackReassignAll">조+번호 모두 재배정</string>
     <string name="fallbackGiveUp">구매 포기</string>
     <string name="buttonSaveGames">%1$d게임 저장</string>
     <string name="buttonSaveEmpty">저장 (구매 안 함)</string>

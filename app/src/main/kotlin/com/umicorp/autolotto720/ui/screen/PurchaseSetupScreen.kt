@@ -6,7 +6,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -55,8 +59,6 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -64,7 +66,6 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -104,7 +105,6 @@ import com.umicorp.autolotto720.R
 import com.umicorp.autolotto720.data.FallbackPolicy
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.Slot720
-import com.umicorp.autolotto720.dhlottery.Feature720
 import com.umicorp.autolotto720.ui.appViewModel
 import com.umicorp.autolotto720.ui.theme.LgAmber
 import com.umicorp.autolotto720.ui.theme.LgTeal
@@ -140,13 +140,12 @@ private val DigitsSaver: Saver<SnapshotStateList<Int?>, ArrayList<Int>> = Saver(
  * 조 선택기·자동/수동 토글·자리별 슬롯릴·게임요약·폴백정책·저장 색전환을 부모(로또) 번호 탭에서 차용하되
  * 입력 단위를 연금 규격(조 1~5 + 6자리)으로 교체했다.
  *
- * **저장 ≠ 구매**: [Feature720.PURCHASE_ENABLED]=false 게이트를 유지하고, 설정 저장은 자동구매를
- * 무장하지 않는다(§9). 상단 배너로 "준비 중"을 명시한다.
+ * **저장 ≠ 구매**: `Feature720.PURCHASE_ENABLED`=false 게이트를 유지하고, 설정 저장은 자동구매를
+ * 무장하지 않는다(§9). 상단 배너로 "준비 중"을 명시한다. 자동구매 on/off 토글은 설정 탭에만 둔다.
  */
 @Composable
 fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
     val vm: PurchaseSetupViewModel = appViewModel()
-    val autoEnabled by vm.autoEnabled.collectAsState()
     val config by vm.config.collectAsState()
 
     // committed: 저장/구매 대상 5슬롯(§3 타입). draft: 현재 슬롯의 미확정 편집 상태.
@@ -329,26 +328,6 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                             )
                         }
                     }
-                }
-                Spacer(Modifier.height(16.dp))
-
-                // 자동 구매 on/off — 게이트가 닫힌 동안은 잠금(명시적 비활성화).
-                SectionCard(contentPadding = PaddingValues(vertical = 4.dp)) {
-                    ListItem(
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        leadingContent = { GlossyIconTile(icon = Icons.Rounded.ConfirmationNumber, tint = LgTeal) },
-                        headlineContent = {
-                            Text(stringResource(R.string.settingEnableAutoPurchase), fontWeight = FontWeight.Bold)
-                        },
-                        supportingContent = { Text(stringResource(R.string.numberGateBannerDesc)) },
-                        trailingContent = {
-                            Switch(
-                                checked = autoEnabled,
-                                onCheckedChange = if (Feature720.PURCHASE_ENABLED) { { v -> vm.setAutoEnabled(v) } } else null,
-                                enabled = Feature720.PURCHASE_ENABLED,
-                            )
-                        },
-                    )
                 }
                 Spacer(Modifier.height(16.dp))
 
@@ -717,8 +696,9 @@ private fun NumberModeToggle(numberManual: Boolean, enabled: Boolean, onChange: 
             .border(1.dp, scheme.outlineVariant, CircleShape),
     ) {
         val half = maxWidth / 2
+        // autolotto와 동일 배열: [수동][자동] — 수동=왼쪽(0), 자동=오른쪽(half).
         val indicatorX by animateDpAsState(
-            targetValue = if (numberManual) half else 0.dp,
+            targetValue = if (numberManual) 0.dp else half,
             animationSpec = MotionSpecs.bouncy(),
             label = "modeIndicator",
         )
@@ -737,8 +717,8 @@ private fun NumberModeToggle(numberManual: Boolean, enabled: Boolean, onChange: 
                 .border(1.dp, LgTeal.copy(alpha = 0.35f), CircleShape),
         )
         Row(Modifier.fillMaxSize()) {
-            ModeLabel(stringResource(R.string.numberModeAuto), active = !numberManual, enabled = enabled, onClick = { onChange(false) }, modifier = Modifier.weight(1f))
             ModeLabel(stringResource(R.string.numberModeManual), active = numberManual, enabled = enabled, onClick = { onChange(true) }, modifier = Modifier.weight(1f))
+            ModeLabel(stringResource(R.string.numberModeAuto), active = !numberManual, enabled = enabled, onClick = { onChange(false) }, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -975,6 +955,22 @@ private fun GameSummary(committed: List<Slot720>, currentSlot: Int, onRemove: (I
                     )
                 }
                 Spacer(Modifier.width(12.dp))
+                if (selecting) {
+                    // "지금 설정 중" 라이브 펄스 닷 — autolotto 게임 설정 섹션과 동일 연출.
+                    val pulse by rememberInfiniteTransition(label = "nowPulse").animateFloat(
+                        initialValue = 0.25f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+                        label = "nowPulseAlpha",
+                    )
+                    Box(
+                        Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(LgTeal.copy(alpha = pulse)),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
                     label,
                     modifier = Modifier.weight(1f),
@@ -1002,7 +998,7 @@ private fun GameSummary(committed: List<Slot720>, currentSlot: Int, onRemove: (I
     }
 }
 
-/** 폴백 정책 선택기(§6) — 조 유지 재배정(기본) / 포기. */
+/** 폴백 정책 선택기(§6) — 조 유지 재배정(기본) / 조+번호 재배정 / 포기. */
 @Composable
 private fun FallbackSelector(fallback: FallbackPolicy, enabled: Boolean, onSelect: (FallbackPolicy) -> Unit) {
     SectionCard {
@@ -1013,6 +1009,13 @@ private fun FallbackSelector(fallback: FallbackPolicy, enabled: Boolean, onSelec
             selected = fallback == FallbackPolicy.KEEP_GROUP_RANDOM,
             enabled = enabled,
             onClick = { onSelect(FallbackPolicy.KEEP_GROUP_RANDOM) },
+        )
+        Spacer(Modifier.height(8.dp))
+        FallbackRow(
+            text = stringResource(R.string.fallbackReassignAll),
+            selected = fallback == FallbackPolicy.REASSIGN_ALL,
+            enabled = enabled,
+            onClick = { onSelect(FallbackPolicy.REASSIGN_ALL) },
         )
         Spacer(Modifier.height(8.dp))
         FallbackRow(

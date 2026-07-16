@@ -46,14 +46,14 @@
     <string name="numberSetupTitle">番号設定</string>
 
     <!-- 「番号」タブ (手動ゲーム設定) -->
-    <string name="numberSetupInstruction">スロットA〜Eに組と番号を設定してください（最大5ゲーム）。保存は設定のみで、実際の購入は準備中です。</string>
+    <string name="numberSetupInstruction">毎週自動購入する組と番号を設定してください。\n手動番号は毎週固定、自動は毎週ランダム割当されます。</string>
     <string name="numberGateBannerDesc">設定は保存されますが、実際の購入は準備中です</string>
     <string name="buttonAllAuto">全部自動</string>
     <string name="rollingAllAuto">自動割当中…</string>
     <string name="groupSelectorLabel">組の選択</string>
     <string name="groupAuto">自動</string>
-    <string name="numberModeAuto">自動</string>
-    <string name="numberModeManual">手動</string>
+    <string name="numberModeAuto">🎲 自動</string>
+    <string name="numberModeManual">✏️ 手動</string>
     <string name="pickGroupPrompt">先に組を選択してください</string>
     <string name="fullAutoCardTitle">完全自動</string>
     <string name="fullAutoCardDesc">組と番号は購入時にサーバーが自動割当します</string>
@@ -64,14 +64,15 @@
     <string name="buttonConfirmGame">%1$sゲーム適用</string>
     <string name="buttonReset">クリア</string>
     <string name="duplicateManualError">同じ組・番号がすでにあります</string>
-    <string name="gameSummaryTitle">ゲーム概要</string>
+    <string name="gameSummaryTitle">📋 ゲーム設定</string>
     <string name="gameSummaryNotSet">未設定</string>
-    <string name="gameSummarySelecting">選択中</string>
-    <string name="gameSummaryFullAuto">完全自動</string>
+    <string name="gameSummarySelecting">いま設定中</string>
+    <string name="gameSummaryFullAuto">🎲 自動 (毎週ランダム)</string>
     <string name="gameSummarySemiAuto">第%1$d組・番号自動</string>
     <string name="gameSummaryManual">第%1$d組  %2$s</string>
     <string name="fallbackPolicyLabel">番号が売り切れの場合</string>
     <string name="fallbackKeepGroup">組を維持・番号再割当</string>
+    <string name="fallbackReassignAll">組+番号を再割当</string>
     <string name="fallbackGiveUp">購入をあきらめる</string>
     <string name="buttonSaveGames">%1$dゲーム保存</string>
     <string name="buttonSaveEmpty">保存（購入なし）</string>

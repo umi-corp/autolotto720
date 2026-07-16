@@ -61,8 +61,9 @@ object Notifications {
             .setSmallIcon(R.mipmap.ic_launcher) // 원본도 @mipmap/ic_launcher를 알림 아이콘으로 사용
             .setColor(BRAND_GREEN) // 작은 아이콘/앱 이름 액센트에 브랜드 그린 적용
             .setColorized(false)
-            // adaptive-icon XML은 decodeResource로 디코드 불가(null) → 래스터 전경 PNG 사용
-            .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher_foreground))
+            // adaptive-icon XML은 decodeResource로 디코드 불가(null) → 풀사이즈 래스터 로고 사용
+            // (런처 전경은 오버스캔용 45% 축소본이라 largeIcon에선 콘텐츠가 너무 작게 보임)
+            .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.splash_logo))
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

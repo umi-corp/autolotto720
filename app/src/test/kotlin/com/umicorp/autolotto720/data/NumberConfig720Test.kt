@@ -56,6 +56,16 @@ class NumberConfig720Test {
         assertEquals(config, restored)
     }
 
+    @Test fun json_round_trip_preserves_reassign_all_fallback() {
+        val config = NumberConfig720(
+            slots = List(5) { Slot720.FullAuto },
+            fallback = FallbackPolicy.REASSIGN_ALL,
+            schemaVersion = NumberConfig720.CURRENT_SCHEMA,
+            revision = 3L,
+        )
+        assertEquals(FallbackPolicy.REASSIGN_ALL, NumberConfig720.fromJson(config.toJson())!!.fallback)
+    }
+
     @Test fun manual_digits_preserve_leading_zero_and_order() {
         val config = NumberConfig720(
             slots = List(5) { if (it == 0) Slot720.Manual(1, listOf(0, 0, 0, 7, 2, 7)) else Slot720.Unset },

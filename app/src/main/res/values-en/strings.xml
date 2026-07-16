@@ -46,14 +46,14 @@
     <string name="numberSetupTitle">Number Setup</string>
 
     <!-- "Numbers" tab (manual game setup) -->
-    <string name="numberSetupInstruction">Set the group and numbers for slots A–E (up to 5 games). Saving only stores settings; purchasing is coming soon.</string>
+    <string name="numberSetupInstruction">Set the group and numbers for weekly auto purchase.\nManual numbers are fixed weekly, auto numbers are randomly assigned.</string>
     <string name="numberGateBannerDesc">Settings are saved, but purchasing is coming soon</string>
     <string name="buttonAllAuto">All Auto</string>
     <string name="rollingAllAuto">Auto-assigning…</string>
     <string name="groupSelectorLabel">Group</string>
     <string name="groupAuto">Auto</string>
-    <string name="numberModeAuto">Auto</string>
-    <string name="numberModeManual">Manual</string>
+    <string name="numberModeAuto">🎲 Auto</string>
+    <string name="numberModeManual">✏️ Manual</string>
     <string name="pickGroupPrompt">Select a group first</string>
     <string name="fullAutoCardTitle">Full Auto</string>
     <string name="fullAutoCardDesc">Both group and numbers are auto-assigned by the server at purchase</string>
@@ -64,14 +64,15 @@
     <string name="buttonConfirmGame">Apply game %1$s</string>
     <string name="buttonReset">Clear</string>
     <string name="duplicateManualError">Same group and number already exists</string>
-    <string name="gameSummaryTitle">Game Summary</string>
+    <string name="gameSummaryTitle">📋 Game Settings</string>
     <string name="gameSummaryNotSet">Not set</string>
-    <string name="gameSummarySelecting">Selecting</string>
-    <string name="gameSummaryFullAuto">Full auto</string>
+    <string name="gameSummarySelecting">Now picking</string>
+    <string name="gameSummaryFullAuto">🎲 Auto (Weekly Random)</string>
     <string name="gameSummarySemiAuto">Group %1$d · auto number</string>
     <string name="gameSummaryManual">Group %1$d  %2$s</string>
     <string name="fallbackPolicyLabel">If the number is taken</string>
     <string name="fallbackKeepGroup">Keep group · reassign number</string>
+    <string name="fallbackReassignAll">Reassign group and number</string>
     <string name="fallbackGiveUp">Give up</string>
     <string name="buttonSaveGames">Save %1$d games</string>
     <string name="buttonSaveEmpty">Save (no purchase)</string>
