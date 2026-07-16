@@ -207,16 +207,16 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setAutoEnabled(v: Boolean) { viewModelScope.launch { container.setAutoEnabled(v) } }
 
-    /** 요일 변경. 구매 불가 시간이면 false 반환(원본 검증 스낵바). */
+    /** 요일 변경. 저장된 시:분과 조합한 후보가 구매 불가 시간이면 false 반환(원본 검증 스낵바). */
     fun setPurchaseDay(day: Int): Boolean {
-        if (!isValidPurchaseTime()) return false
+        if (!isValidPurchaseTime(day, autoPurchaseHour.value, autoPurchaseMinute.value)) return false
         viewModelScope.launch { container.setAutoPurchaseDay(day) }
         return true
     }
 
-    /** 시간 변경. 구매 불가 시간이면 false 반환. */
+    /** 시간 변경. 저장된 요일과 조합한 후보가 구매 불가 시간이면 false 반환. */
     fun setPurchaseTime(hour: Int, minute: Int): Boolean {
-        if (!isValidPurchaseTime()) return false
+        if (!isValidPurchaseTime(autoPurchaseDay.value, hour, minute)) return false
         viewModelScope.launch { container.setAutoPurchaseTime(hour, minute) }
         return true
     }
@@ -229,9 +229,11 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     companion object {
         /**
          * 구매 가능 시간 (연금복권720+ 규칙). 645 토요일 판매정지 규칙을 대체 — 720은 목 17:00 마감,
-         * 19:05 추첨. AutoPurchaseWorker의 판매마감 가드와 동일한 [Round720.isSalesClosed](단일 판정)을
-         * 공유해 드리프트를 막는다: 지금(KST)이 다가오는 회차의 추첨일(목)이고 17:00 이후면 구매 불가.
+         * 19:05 추첨. "지금"이 아니라 저장하려는 후보 스케줄(요일,시,분)을 검증한다(R2 N1): 목 17:00~19:05
+         * 죽은 창에 예약하면 워커의 런타임 판매마감 가드가 매주 조용히 스킵해 영구 무구매가 되므로 저장을 막는다.
+         * 워커 런타임 가드([Round720.isSalesClosed])와 죽은 창 정의를 공유([Round720.isInSalesDeadWindow])해 드리프트를 막는다.
          */
-        fun isValidPurchaseTime(): Boolean = !Round720.isSalesClosed()
+        fun isValidPurchaseTime(day: Int, hour: Int, minute: Int): Boolean =
+            !Round720.isInSalesDeadWindow(day, hour, minute)
     }
 }

@@ -10,6 +10,7 @@ import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.data.WinningNumbers720
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
+import com.umicorp.autolotto720.dhlottery.Feature720
 import com.umicorp.autolotto720.dhlottery.HistoryService720
 import com.umicorp.autolotto720.dhlottery.ResultService720
 import com.umicorp.autolotto720.dhlottery.Round720
@@ -37,7 +38,9 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
             executeCheckResult(lastAttempt)
         } catch (e: Exception) {
             if (e is CancellationException) throw e   // 코루틴 취소는 삼키지 않는다 — 오보/오분류 방지(R3).
-            if (lastAttempt) Notifications.show(ctx, "⚠️ AutoLotto720 오류", "당첨 결과 확인에 실패했습니다.", 99)
+            // 알림 표시 실패가 아래 알람 재등록을 막지 않도록 방어 — show가 throw해도 체인은 이어진다(R2 N2).
+            if (lastAttempt) runCatching { Notifications.show(ctx, "⚠️ AutoLotto720 오류", "당첨 결과 확인에 실패했습니다.", 99) }
+                .onFailure { if (it is CancellationException) throw it }
             lastAttempt
         }
 
@@ -45,7 +48,9 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
         try {
             if (store.getAutoEnabled()) AlarmScheduler(ctx).scheduleCheckResult()
         } catch (e: Exception) {
-            Notifications.show(ctx, "⚠️ AutoLotto720 오류", "결과확인 알람 재등록 실패: ${e.message ?: e}", 98)
+            if (e is CancellationException) throw e   // 코루틴 취소는 삼키지 않는다(R2 N4).
+            runCatching { Notifications.show(ctx, "⚠️ AutoLotto720 오류", "결과확인 알람 재등록 실패: ${e.message ?: e}", 98) }
+                .onFailure { if (it is CancellationException) throw it }
         }
 
         return if (done) Result.success() else Result.retry()
@@ -66,7 +71,12 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
 
         // 로그인 → 구매이력 조회. 실패(로그인/네트워크 등)는 마지막 시도 전까지 재시도.
-        val tickets: List<Ticket720> = try {
+        // 구매 게이트 오프(Feature720.PURCHASE_ENABLED=false)면 fetchRecentPurchases가 항상 빈 목록이라
+        // 로그인/자격증명/이력조회를 통째로 스킵한다(R2 N3): 무의미한 네트워크·자격증명 사용 제거 + 일시 로그인
+        // 실패가 재시도(최대 ~90분)를 태워 당첨번호 통지를 지연시키는 것 방지. 게이트가 켜지면 아래 경로가 그대로 재개된다.
+        val tickets: List<Ticket720> = if (!Feature720.PURCHASE_ENABLED) {
+            emptyList() // 게이트 오프 — 매칭 없음으로 취급해 당첨번호만 폴백 알림
+        } else try {
             val cred = store.getCredentials()
             val userId = cred.userId ?: throw Exception("no_credentials")
             val password = cred.password ?: throw Exception("no_credentials")
@@ -162,7 +172,7 @@ internal fun buildMatchedNotification(round: Int, winning: WinningNumbers720, ti
  * @return null=재시도, non-null=(제목, 본문) 폴백 알림 후 재시도 체인 종료.
  */
 internal fun unpostedNotification(round: Int, lastAttempt: Boolean): Pair<String, String>? =
-    if (lastAttempt) "🎱 제 ${round}회 결과 확인 실패" to "결과 확인 실패 (당첨번호 미게시)" else null
+    if (lastAttempt) "🎱 제 ${round}회 결과 확인 실패" to "결과 확인 실패 (당첨번호 미게시 또는 네트워크 오류)" else null
 
 /** 매칭 구매 없음(또는 조회 실패 마지막 시도) 폴백 — 당첨번호만 알림(제목, 본문). */
 internal fun buildFallbackNotification(round: Int, winning: WinningNumbers720): Pair<String, String> {

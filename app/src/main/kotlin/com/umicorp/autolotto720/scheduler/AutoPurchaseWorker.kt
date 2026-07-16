@@ -46,13 +46,17 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
             } else {
                 val body = when {
                     msg.contains("[login]") -> "로그인에 실패했습니다. 아이디/비밀번호를 확인해주세요."
+                    // [commit] 실패는 결제 성공 후 회차 기록(setLastPurchasedRound)만 실패 → 구매 완료로 안내(비재시도).
+                    msg.contains("[commit]") -> "구매는 완료되었으나 기록 저장에 실패했습니다. 앱에서 구매 내역을 확인해주세요."
                     // [notify] 실패는 구매가 이미 커밋(setLastPurchasedRound)된 뒤 알림 표시만 실패한 것 → 구매 완료로 안내.
                     msg.contains("[notify]") -> "구매는 완료되었으나 알림 표시에 실패했습니다."
                     // API 응답 메시지 그대로 전달 (주간구매금액 초과 등)
                     msg.contains("구매 실패:") -> msg.replace("[purchase] ", "")
                     else -> "자동 구매에 실패했습니다. 앱을 열어 상태를 확인해주세요."
                 }
-                Notifications.show(ctx, "⚠️ AutoLotto720 오류", body, 99)
+                // 알림 표시 실패가 아래 알람 재등록을 막지 않도록 방어 — show가 throw해도 체인은 이어진다(R2 N2).
+                runCatching { Notifications.show(ctx, "⚠️ AutoLotto720 오류", body, 99) }
+                    .onFailure { if (it is CancellationException) throw it }
             }
         }
 
@@ -60,7 +64,9 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
         try {
             if (store.getAutoEnabled()) AlarmScheduler(ctx).scheduleAutoPurchase()
         } catch (e: Exception) {
-            Notifications.show(ctx, "⚠️ AutoLotto720 오류", "알람 재등록에 실패했습니다.", 98)
+            if (e is CancellationException) throw e   // 코루틴 취소는 삼키지 않는다(R2 N4).
+            runCatching { Notifications.show(ctx, "⚠️ AutoLotto720 오류", "알람 재등록에 실패했습니다.", 98) }
+                .onFailure { if (it is CancellationException) throw it }
         }
 
         return result
@@ -90,7 +96,17 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
             // 판매마감 가드(R2 N2 — 좁은 창만): 다가오는 회차의 추첨일이 오늘이고 17:00 이후면 스킵.
             // 19:05 추첨 후엔 다가오는 회차가 다음 주로 롤오버되므로(추첨일≠오늘) 이 가드를 통과해 정상 구매된다.
             step = "sales_close_guard"
-            if (isSalesClosed(now)) return
+            if (isSalesClosed(now)) {
+                // Doze 지연 등으로 목 17:00 이후 실행돼 스킵 — 침묵 종료 대신 통지한다(R2 N7). 다음 주 알람은 계속 재등록.
+                Notifications.show(
+                    ctx,
+                    "⚠️ AutoLotto720 자동구매 건너뜀",
+                    "판매 마감 시간(목 17:00) 이후 실행되어 이번 회차 자동구매를 건너뛰었습니다. 구매 시각 설정을 확인해주세요.",
+                    3,
+                    tab = Notifications.TAB_SETTINGS,
+                )
+                return
+            }
 
             // 회차 멱등 가드: Worker 재실행(프로세스 킬 후 WorkManager 재스케줄)·중복 알람에도 같은 회차 재구매 방지.
             step = "round_guard"
@@ -109,6 +125,8 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 // 성공 즉시 회차 기록(commit) — 이후 재실행은 round_guard가 차단.
                 // ponytail: 서버 처리~기록 사이 찰나에 킬되는 창은 남는다(중복결제 double-charge ceiling,
                 // "autolotto 정책 그대로" 결정으로 수용) — unique work 직렬화 + [purchase] 비재시도가 1차 방어.
+                // 결제는 성공했으므로 기록 저장 실패는 [purchase]가 아닌 [commit]으로 분류 → "구매 실패" 오보 방지(R2 N6, 비재시도).
+                step = "commit"
                 store.setLastPurchasedRound(result.round)
 
                 // 구매 후 잔액 체크 (실패 무시 — 원본 catch (_) {}). 취소는 삼키지 않는다(R3).
@@ -154,8 +172,11 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
             return lastPurchasedRound >= Round720.getUpcomingDrawRound(kstNow)
         }
 
-        /** [purchase]/[notify] 실패는 서버가 이미 처리했을 수 있어 재시도 금지(중복 결제 방지). 테스트 전용 노출. */
+        /**
+         * [purchase]/[commit]/[notify] 실패는 결제가 이미 처리된 뒤라 재시도 금지(중복 결제 방지). 테스트 전용 노출.
+         * [commit]은 결제 성공 후 회차 기록 실패라 재시도하면 round_guard가 못 막아 재구매(double-charge) 위험 → 비재시도.
+         */
         internal fun isAmbiguousFailure(message: String): Boolean =
-            message.startsWith("[purchase]") || message.startsWith("[notify]")
+            message.startsWith("[purchase]") || message.startsWith("[commit]") || message.startsWith("[notify]")
     }
 }

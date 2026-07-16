@@ -67,4 +67,18 @@ class ResultService720Test {
         assertEquals("201327", result.number)
         server.shutdown()
     }
+
+    // R2 N5: 최신 조회(round==null)는 index 0만 엄격 파싱 — result[0]이 malformed면 더 오래된 회차로 조용히
+    // 강등하지 않고 null을 반환한다. (명시 회차 조회의 skip-and-search 복원력은 위 테스트로 유지.)
+    @Test fun latest_query_with_malformed_leading_element_returns_null() = runTest {
+        val body = """{"data":{"result":[null,{"psltEpsd":319,"wnBndNo":"3","wnRnkVl":"201327","bnsRnkVl":"632035","psltRflYmd":"20260611"}]}}"""
+        val server = MockWebServer().apply {
+            enqueue(MockResponse().setBody("<html>ok</html>"))
+            enqueue(MockResponse().setBody(body))
+            start()
+        }
+        val session = DhlotterySession(baseUrl = server.url("/").toString().trimEnd('/'))
+        assertEquals(null, ResultService720(session).getWinningNumbers()) // round==null → 최신
+        server.shutdown()
+    }
 }

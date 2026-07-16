@@ -79,6 +79,11 @@ class AutoPurchaseWorkerTest {
         assertTrue(AutoPurchaseWorker.isAmbiguousFailure("[notify] 알림 실패"))
     }
 
+    // R2 N6: 결제 성공 후 회차 기록 실패([commit])는 재시도하면 재구매(double-charge) 위험 → 비재시도.
+    @Test fun `commit-tagged failure is ambiguous and non-retryable`() {
+        assertTrue(AutoPurchaseWorker.isAmbiguousFailure("[commit] 기록 저장 실패"))
+    }
+
     @Test fun `login-tagged failure is retryable`() {
         assertFalse(AutoPurchaseWorker.isAmbiguousFailure("[login] 로그인 실패"))
     }

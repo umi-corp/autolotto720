@@ -73,4 +73,11 @@ class Round720Test {
     @Test fun sales_open_wednesday() = assertFalse(Round720.isSalesClosed(at(2026, 7, 15, 10, 0)))
     @Test fun sales_open_friday() = assertFalse(Round720.isSalesClosed(at(2026, 7, 17, 10, 0)))
     @Test fun sales_open_thursday_after_1905_draw_rollover() = assertFalse(Round720.isSalesClosed(at(2026, 7, 16, 19, 6)))
+
+    // R2 N1: 후보 스케줄(요일,시,분) 검증 — 목 17:00~19:05 죽은 창만 거부. VM 입력검증이 공유하는 순수 판정.
+    @Test fun deadwindow_thursday_1659_valid() = assertFalse(Round720.isInSalesDeadWindow(4, 16, 59))
+    @Test fun deadwindow_thursday_1700_invalid() = assertTrue(Round720.isInSalesDeadWindow(4, 17, 0))
+    @Test fun deadwindow_thursday_1904_invalid() = assertTrue(Round720.isInSalesDeadWindow(4, 19, 4))
+    @Test fun deadwindow_thursday_1905_valid() = assertFalse(Round720.isInSalesDeadWindow(4, 19, 5))
+    @Test fun deadwindow_monday_1800_valid() = assertFalse(Round720.isInSalesDeadWindow(1, 18, 0))
 }
