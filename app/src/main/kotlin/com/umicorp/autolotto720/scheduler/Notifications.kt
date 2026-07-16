@@ -27,7 +27,7 @@ import java.util.Locale
 object Notifications {
 
     /** 브랜드 그린(Task10 리시드 0xFF1B7F4B) — 작은 아이콘·앱 이름 액센트 색상 (아이콘 아트 자체는 기존 ic_launcher 유지). */
-    private const val BRAND_GREEN = 0xFF1B7F4B.toInt()
+    private const val BRAND_GREEN = 0xFF0E9E57.toInt() // Neon Vault primary(에메랄드)와 일치
 
     private const val CHANNEL_ID = "autolotto720_channel"
     private const val CHANNEL_NAME = "AutoLotto720 알림"
@@ -61,7 +61,8 @@ object Notifications {
             .setSmallIcon(R.mipmap.ic_launcher) // 원본도 @mipmap/ic_launcher를 알림 아이콘으로 사용
             .setColor(BRAND_GREEN) // 작은 아이콘/앱 이름 액센트에 브랜드 그린 적용
             .setColorized(false)
-            .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher))
+            // adaptive-icon XML은 decodeResource로 디코드 불가(null) → 래스터 전경 PNG 사용
+            .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher_foreground))
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

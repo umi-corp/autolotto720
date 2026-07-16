@@ -60,7 +60,9 @@ fun SplashScreen(container: AppContainer, onFinished: () -> Unit) {
             verticalArrangement = Arrangement.Center,
         ) {
             Image(
-                painter = painterResource(R.mipmap.ic_launcher),
+                // ic_launcher는 API26+에서 adaptive-icon XML로 해석됨 → painterResource가 로드 불가(크래시).
+                // 래스터 전경 PNG(네이비+그린 콘텐츠)를 사용. 네이비 스플래시 배경과 톤 일치.
+                painter = painterResource(R.mipmap.ic_launcher_foreground),
                 contentDescription = null,
                 modifier = Modifier.size(120.dp).clip(RoundedCornerShape(28.dp)),
             )
