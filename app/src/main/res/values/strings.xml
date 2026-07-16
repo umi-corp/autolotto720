@@ -51,28 +51,8 @@
     <string name="purchaseGamesCountHint">매주 자동 구매할 매수를 선택하세요 (1~5매)</string>
     <string name="purchaseManualComingSoon">조/번호 직접 지정은 추후 지원 예정입니다</string>
 
-    <!-- 번호 설정 (구 화면 — Task12에서 구매조건 탭으로 대체, 645 잔재는 Task15에서 정리) -->
+    <!-- 구매 설정(720 구매조건 탭) -->
     <string name="numberSetupTitle">구매 설정</string>
-    <string name="bannerEnableAutoPurchase">설정에서 자동 구매를 활성화해주세요</string>
-    <string name="numberSetupInstruction">매주 자동 구매할 번호를 설정하세요.\n수동 번호는 매주 고정, 자동은 매주 랜덤 생성됩니다.</string>
-    <string name="modeManual">✏️ 수동</string>
-    <string name="modeAuto">🎲 자동</string>
-    <string name="autoNumberTitle">자동 번호</string>
-    <string name="autoNumberSubtitle">매주 랜덤으로 생성됩니다</string>
-    <string name="buttonAllAuto">전부 자동</string>
-    <string name="buttonReset">초기화</string>
-    <string name="buttonConfirmGame">게임 %1$s 확정 ✓</string>
-    <string name="selectionCount">선택: %1$d/6</string>
-    <string name="gameSummaryTitle">📋 게임 설정</string>
-    <string name="gameSummarySelecting">지금 설정 중</string>
-    <string name="rollingAllAuto">행운을 굴리는 중</string>
-    <string name="gameSummaryNotSet">미설정</string>
-    <string name="gameSummaryAuto">🎲 자동 (매주 랜덤)</string>
-    <string name="buttonSaveDone">저장 완료!</string>
-    <string name="buttonSaveGames">%1$d게임 설정 저장</string>
-    <string name="buttonSaveEmpty">게임 없이 저장</string>
-    <string name="snackbarSaveSuccess">✅ %1$d게임 설정 저장 완료! %2$s에 자동 구매됩니다.</string>
-    <string name="snackbarSaveEmpty">✅ 저장 완료! 구매할 게임이 없어 자동 구매되지 않습니다.</string>
 
     <!-- 기록 -->
     <string name="historyTitle">구매 기록</string>

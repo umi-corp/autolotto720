@@ -267,7 +267,7 @@ internal fun markdownLite(src: String): AnnotatedString = buildAnnotatedString {
 
 /**
  * 플로팅 알약(pill) 하단 네비. M3 NavigationBar 대신 크림 위에 떠 있는 둥근 pill.
- * 4탭(홈/번호/내역/설정) + 선택 시 틸 인디케이터 pill + 아이콘 스프링 바운스. 라벨은 stringResource 그대로.
+ * 4탭(홈/구매/내역/설정) + 선택 시 틸 인디케이터 pill + 아이콘 스프링 바운스. 라벨은 stringResource 그대로.
  */
 @Composable
 private fun FloatingPillNav(

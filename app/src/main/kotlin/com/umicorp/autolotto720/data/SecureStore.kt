@@ -14,7 +14,6 @@ object SecureKeys {
     const val PASSWORD = "dhlottery_password"
     const val AUTO_ENABLED = "auto_purchase_enabled"
     const val AUTO_GAMES = "auto_games"
-    const val MANUAL_NUMBERS = "manual_numbers"
     const val AUTO_PURCHASE_DAY = "auto_purchase_day"
     const val AUTO_PURCHASE_HOUR = "auto_purchase_hour"
     const val AUTO_PURCHASE_MINUTE = "auto_purchase_minute"
@@ -28,7 +27,7 @@ object SecureKeys {
 
     /** 마이그레이션·일괄 처리용 전체 키 목록. */
     val ALL = listOf(
-        USER_ID, PASSWORD, AUTO_ENABLED, AUTO_GAMES, MANUAL_NUMBERS,
+        USER_ID, PASSWORD, AUTO_ENABLED, AUTO_GAMES,
         AUTO_PURCHASE_DAY, AUTO_PURCHASE_HOUR, AUTO_PURCHASE_MINUTE, LANGUAGE,
         BALANCE_ALERT_ENABLED, BALANCE_ALERT_THRESHOLD, BALANCE_ALERT_LAST_DATE,
     )
@@ -105,12 +104,6 @@ class SecureStore(context: Context) {
 
     /** int.tryParse(val ?? '') ?? 0 와 동일. */
     fun getAutoGames(): Int = prefs.getString(SecureKeys.AUTO_GAMES, null)?.toIntOrNull() ?: 0
-
-    /** 수동 번호 저장 (JSON 5슬롯 문자열). */
-    fun setManualNumbers(json: String) = putString(SecureKeys.MANUAL_NUMBERS, json)
-
-    /** 미설정 시 "[]" (원본 기본값). */
-    fun getManualNumbers(): String = prefs.getString(SecureKeys.MANUAL_NUMBERS, null) ?: "[]"
 
     // === 구매 시간 설정 ===
 

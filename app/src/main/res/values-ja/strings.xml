@@ -48,26 +48,6 @@
     <string name="purchaseManualComingSoon">組・番号の直接指定は今後対応予定です</string>
 
     <string name="numberSetupTitle">購入設定</string>
-    <string name="bannerEnableAutoPurchase">設定で自動購入を有効にしてください</string>
-    <string name="numberSetupInstruction">毎週自動購入する番号を設定してください。\n手動番号は毎週固定、自動は毎週ランダム生成されます。</string>
-    <string name="modeManual">✏️ 手動</string>
-    <string name="modeAuto">🎲 自動</string>
-    <string name="autoNumberTitle">自動番号</string>
-    <string name="autoNumberSubtitle">毎週ランダムに生成されます</string>
-    <string name="buttonAllAuto">すべて自動</string>
-    <string name="buttonReset">リセット</string>
-    <string name="buttonConfirmGame">ゲーム%1$s 確定 ✓</string>
-    <string name="selectionCount">選択: %1$d/6</string>
-    <string name="gameSummaryTitle">📋 ゲーム設定</string>
-    <string name="gameSummarySelecting">いま設定中</string>
-    <string name="rollingAllAuto">運試し中</string>
-    <string name="gameSummaryNotSet">未設定</string>
-    <string name="gameSummaryAuto">🎲 自動 (毎週ランダム)</string>
-    <string name="buttonSaveDone">保存完了！</string>
-    <string name="buttonSaveGames">%1$dゲーム設定を保存</string>
-    <string name="buttonSaveEmpty">ゲームなしで保存</string>
-    <string name="snackbarSaveSuccess">✅ %1$dゲーム設定保存完了！ %2$sに自動購入されます。</string>
-    <string name="snackbarSaveEmpty">✅ 保存しました！ゲームがないため自動購入されません。</string>
 
     <string name="historyTitle">購入履歴</string>
     <string name="historyNoRecords">購入履歴がありません</string>

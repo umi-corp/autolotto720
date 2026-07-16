@@ -1,6 +1,6 @@
-# 🎰 AutoLotto
+# 🎰 AutoLotto720
 
-동행복권 로또 6/45 자동 구매 & 당첨 확인 앱
+동행복권 연금복권720+ 자동 구매 & 당첨 확인 앱
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2-blue.svg)](https://kotlinlang.org)
@@ -16,10 +16,12 @@
 
 ## ✨ 주요 기능
 
-- **자동 구매** — 설정한 요일/시간에 자동으로 로또 구매 (최대 5게임)
-- **수동/자동 번호** — 게임별로 수동 번호 지정 또는 자동 생성 선택
-- **당첨 확인** — 매주 토요일 21:00 자동 당첨 확인 & 푸시 알림
-- **구매 기록** — 게임별 번호, 등수, 당첨금 한눈에 확인
+- **자동 구매** — 설정한 요일/시간에 매주 자동 구매 (1~5매). ⚠️ 온라인 구매는 현재
+  **비활성화**(`Feature720.PURCHASE_ENABLED = false`) 상태입니다 — 연금복권720+ 온라인 구매는
+  클라이언트 사이드 AES 암호화 서브시스템(pension.js)이라 실제 구매 요청 계약을 브라우저에서
+  캡처하기 전까지는 블라인드 실결제를 하지 않습니다.
+- **당첨 확인** — 매주 목요일 19:05 추첨 이후(21:00 슬롯) 자동 당첨 확인 & 푸시 알림
+- **구매 기록** — 회차별 조/번호, 등수, 당첨금 한눈에 확인
 - **보안 저장** — 계정 정보는 Android Keystore(EncryptedSharedPreferences) 암호화 저장
 - **모던 디자인** — Material 3 Expressive 'Lucky Gloss', 네이티브 Jetpack Compose · 스프링 인터랙션
 - **자동 업데이트** — 앱 내에서 새 버전 원탭 설치 (사이드로드 배포)
@@ -52,25 +54,27 @@
 ```
 
 빌드된 APK: `app/build/outputs/apk/release/app-release.apk`
-릴리스 서명은 루트 `key.properties`(gitignore)가 있을 때만 활성화됩니다.
+릴리스 서명은 루트 `key.properties`(gitignore)가 있을 때만 활성화됩니다. 이 포크(`umi-corp/autolotto720`)는
+원본 autolotto와 별개의 애플리케이션 ID를 쓰므로 **자체 릴리스 키스토어**가 필요합니다 — 원본 keystore로는
+서명/업데이트가 불가합니다.
 
 ## 📂 프로젝트 구조
 
 ```
-app/src/main/kotlin/com/umicorp/autolotto/
+app/src/main/kotlin/com/umicorp/autolotto720/
 ├── MainActivity.kt              # 진입점 (Compose setContent)
 ├── AppContainer.kt              # 앱 스코프 컴포지션 루트 (상태·서비스·업데이트)
 ├── dhlottery/                   # 동행복권 역공학 세션
 │   ├── AuthService.kt           # RSA 로그인 (도메인별 쿠키)
-│   ├── PurchaseService.kt       # 로또 구매 (execBuy.do)
-│   ├── ResultService.kt         # 당첨번호 조회
-│   ├── HistoryService.kt        # 구매 내역
+│   ├── PurchaseService720.kt    # 연금복권720+ 자동구매 (온라인 구매는 게이트됨)
+│   ├── ResultService720.kt      # 720 당첨번호 조회
+│   ├── HistoryService720.kt     # 720 구매 내역
+│   ├── Round720.kt              # 회차 계산 (목요일 19:05 추첨 기준)
+│   ├── Feature720.kt            # PURCHASE_ENABLED 게이트
 │   ├── DhlotterySession.kt      # OkHttp 세션 (수동 리다이렉트)
 │   └── RsaCrypto.kt             # RSA PKCS1
 ├── data/
-│   ├── SecureStore.kt           # EncryptedSharedPreferences (+ Flutter 마이그레이션)
-│   ├── Purchase.kt
-│   └── WinningResult.kt
+│   └── SecureStore.kt           # EncryptedSharedPreferences (+ Flutter 마이그레이션)
 ├── scheduler/                   # AlarmManager 자가연쇄 + WorkManager
 │   ├── AlarmScheduler.kt        # 알람 등록 (자동구매 1001 / 결과확인 1002)
 │   ├── AutoPurchaseWorker.kt    # 백그라운드 자동 구매
@@ -82,7 +86,7 @@ app/src/main/kotlin/com/umicorp/autolotto/
 └── ui/                          # Jetpack Compose · Material 3 Expressive
     ├── App.kt                   # 하단 pill 네비 + 4탭 페이저
     ├── SplashScreen.kt          # 스플래시 (자동 로그인)
-    ├── screen/                  # Home · Number · History · Settings
+    ├── screen/                  # Home · 구매조건 · History · Settings
     ├── theme/                   # Lucky Gloss 테마·색·모션
     └── util/                    # 볼 색상·포맷 등 UI 헬퍼
 ```
@@ -97,8 +101,9 @@ app/src/main/kotlin/com/umicorp/autolotto/
 ## ⚠️ 주의사항
 
 - 이 앱은 **동행복권(dhlottery.co.kr) 계정**이 필요합니다
-- 로또 구매에는 **예치금 충전**이 선행되어야 합니다
-- 구매 가능 시간: 평일/일요일 06:00\~23:59, 토요일 06:00\~19:59
+- 연금복권720+ 구매에는 **예치금 충전**이 선행되어야 합니다
+- 온라인 자동 구매는 AES 구매 계약 캡처 전까지 **비활성화**되어 있습니다 (당첨 확인·알림은 정상 동작)
+- 추첨은 매주 **목요일 19:05**, 결과 확인 알림은 21:00 슬롯에서 동작합니다
 - 자동 구매가 정상 동작하려면 **배터리 최적화 제외** 설정을 권장합니다
 - Google Play 도박 정책으로 인해 **스토어 배포 불가** → GitHub APK 직접 배포
 
@@ -109,4 +114,3 @@ app/src/main/kotlin/com/umicorp/autolotto/
 ## 📄 라이선스
 
 [MIT License](LICENSE) — 자유롭게 사용, 수정, 배포 가능합니다.
-

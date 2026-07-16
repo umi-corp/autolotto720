@@ -48,26 +48,6 @@
     <string name="purchaseManualComingSoon">Manual group/number selection is coming soon</string>
 
     <string name="numberSetupTitle">Purchase Setup</string>
-    <string name="bannerEnableAutoPurchase">Please enable auto purchase in Settings</string>
-    <string name="numberSetupInstruction">Set numbers for weekly auto purchase.\nManual numbers are fixed weekly, auto numbers are randomly generated.</string>
-    <string name="modeManual">✏️ Manual</string>
-    <string name="modeAuto">🎲 Auto</string>
-    <string name="autoNumberTitle">Auto Numbers</string>
-    <string name="autoNumberSubtitle">Randomly generated each week</string>
-    <string name="buttonAllAuto">All Auto</string>
-    <string name="buttonReset">Reset</string>
-    <string name="buttonConfirmGame">Confirm Game %1$s ✓</string>
-    <string name="selectionCount">Selected: %1$d/6</string>
-    <string name="gameSummaryTitle">📋 Game Settings</string>
-    <string name="gameSummarySelecting">Now picking</string>
-    <string name="rollingAllAuto">Rolling for luck</string>
-    <string name="gameSummaryNotSet">Not set</string>
-    <string name="gameSummaryAuto">🎲 Auto (Weekly Random)</string>
-    <string name="buttonSaveDone">Saved!</string>
-    <string name="buttonSaveGames">Save %1$d Games</string>
-    <string name="buttonSaveEmpty">Save with No Games</string>
-    <string name="snackbarSaveSuccess">✅ %1$d games saved! Auto purchase at %2$s.</string>
-    <string name="snackbarSaveEmpty">✅ Saved! No games set — nothing will be purchased.</string>
 
     <string name="historyTitle">Purchase History</string>
     <string name="historyNoRecords">No purchase records</string>

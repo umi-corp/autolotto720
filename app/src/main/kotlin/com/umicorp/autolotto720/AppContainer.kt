@@ -8,9 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.umicorp.autolotto720.data.SecureStore
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
-import com.umicorp.autolotto720.dhlottery.HistoryService
 import com.umicorp.autolotto720.dhlottery.HistoryService720
-import com.umicorp.autolotto720.dhlottery.ResultService
 import com.umicorp.autolotto720.dhlottery.ResultService720
 import com.umicorp.autolotto720.scheduler.AlarmScheduler
 import com.umicorp.autolotto720.scheduler.BalanceAlert
@@ -49,11 +47,8 @@ class AppContainer(context: Context) {
     val session = DhlotterySession()
     val auth = AuthService(session)
     val scheduler = AlarmScheduler(appContext)
-    val resultService = ResultService()            // 로그인 불필요 — 자체 세션
-    val historyService = HistoryService(session)   // 로그인된 공유 세션 차용
 
-    // === 720 서비스 (Task9 — Home/History ViewModel은 Task11/13에서 전환. 그때까지 645와 공존,
-    //     둘 다 Task15 최종 정리에서 정리) ===
+    // === 720 서비스 ===
     val resultService720 = ResultService720()
     val historyService720 = HistoryService720(session, resultService720)
 

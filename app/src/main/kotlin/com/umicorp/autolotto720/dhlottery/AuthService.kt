@@ -11,7 +11,7 @@ class DhlotteryException(message: String) : Exception(message)
  * 동행복권 로그인/세션 서비스 (Flutter AuthService 포트).
  *
  * 로그인 흐름: 메인 → 로그인 페이지 → RSA 공개키 → id/pw RSA 암호화 → 로그인 POST →
- * game645 방문으로 ol 세션 발급 → mypage 호출로 검증. 검증 실패 시 INVALID_CREDENTIALS.
+ * game720 방문으로 ol 세션 발급 → mypage 호출로 검증. 검증 실패 시 INVALID_CREDENTIALS.
  *
  * 리다이렉트 추적은 Dart가 `_followRedirects`를 명시 호출한 지점만 `follow=true`로 맞춘다(1:1).
  */

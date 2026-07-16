@@ -16,13 +16,6 @@ object ApiConstants {
     const val BALANCE = "/mypage/selectUserMndp.do"
     const val MYPAGE_LEDGER = "/mypage/mylotteryledger" // 원장 페이지(.do 아님) — 내역 방문/Referer용
     const val PURCHASE_HISTORY = "/mypage/selectMyLotteryledger.do"
-    const val TICKET_DETAIL = "/mypage/lotto645TicketDetail.do"
-    const val WINNING_NUMBER = "/lt645/selectPstLt645Info.do"
-
-    // ol 경로
-    const val GAME645 = "/olotto/game/game645.do"
-    const val READY_SOCKET = "/olotto/game/egovUserReadySocket.json"
-    const val EXEC_BUY = "/olotto/game/execBuy.do"
 
     // 720 경로 — 당첨번호 조회는 확정(720-api-contract.md §1), 나머지는 로그인 스파이크 대상 TODO placeholder.
     const val WINNING_NUMBER_720 = "/pt720/selectPstPt720WnList.do"
