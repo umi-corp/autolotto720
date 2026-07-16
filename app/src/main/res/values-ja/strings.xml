@@ -2,7 +2,7 @@
 <!-- ja (원본 app_ja.arb 1:1 포트). -->
 <resources>
     <string name="nav_home">ホーム</string>
-    <string name="nav_numbers">購入</string>
+    <string name="nav_numbers">番号</string>
     <string name="nav_history">履歴</string>
     <string name="nav_settings">設定</string>
 
@@ -12,7 +12,7 @@
     <string name="autoPurchaseDisabled">自動購入 無効</string>
     <string name="autoPurchaseSchedule">%1$sに自動購入されます</string>
     <string name="enableInSettings">設定で有効にしてください</string>
-    <string name="buttonSetupNumbers">🎯 購入設定へ</string>
+    <string name="buttonSetupNumbers">🎯 番号設定へ</string>
 
     <string name="countdownTitle">第%1$d回 抽選まで</string>
     <string name="countdownDays">日</string>
@@ -43,7 +43,60 @@
     <string name="purchaseGamesCountHint">毎週自動購入する口数を選択してください（1〜5口）</string>
     <string name="purchaseManualComingSoon">組・番号の直接指定は今後対応予定です</string>
 
-    <string name="numberSetupTitle">購入設定</string>
+    <string name="numberSetupTitle">番号設定</string>
+
+    <!-- 「番号」タブ (手動ゲーム設定) -->
+    <string name="numberSetupInstruction">スロットA〜Eに組と番号を設定してください（最大5ゲーム）。保存は設定のみで、実際の購入は準備中です。</string>
+    <string name="numberGateBannerDesc">設定は保存されますが、実際の購入は準備中です</string>
+    <string name="buttonAllAuto">全部自動</string>
+    <string name="rollingAllAuto">自動割当中…</string>
+    <string name="groupSelectorLabel">組の選択</string>
+    <string name="groupAuto">自動</string>
+    <string name="numberModeAuto">自動</string>
+    <string name="numberModeManual">手動</string>
+    <string name="pickGroupPrompt">先に組を選択してください</string>
+    <string name="fullAutoCardTitle">完全自動</string>
+    <string name="fullAutoCardDesc">組と番号は購入時にサーバーが自動割当します</string>
+    <string name="semiAutoCardTitle">番号は自動割当</string>
+    <string name="semiAutoCardDesc">選択した組の中で番号が自動割当されます</string>
+    <string name="numberInputSectionTitle">番号入力</string>
+    <string name="applyToAllGroups">全組に同じ番号を適用</string>
+    <string name="buttonConfirmGame">%1$sゲーム適用</string>
+    <string name="buttonReset">クリア</string>
+    <string name="duplicateManualError">同じ組・番号がすでにあります</string>
+    <string name="gameSummaryTitle">ゲーム概要</string>
+    <string name="gameSummaryNotSet">未設定</string>
+    <string name="gameSummarySelecting">選択中</string>
+    <string name="gameSummaryFullAuto">完全自動</string>
+    <string name="gameSummarySemiAuto">第%1$d組・番号自動</string>
+    <string name="gameSummaryManual">第%1$d組  %2$s</string>
+    <string name="fallbackPolicyLabel">番号が売り切れの場合</string>
+    <string name="fallbackKeepGroup">組を維持・番号再割当</string>
+    <string name="fallbackGiveUp">購入をあきらめる</string>
+    <string name="buttonSaveGames">%1$dゲーム保存</string>
+    <string name="buttonSaveEmpty">保存（購入なし）</string>
+    <string name="buttonSaveDone">保存済み</string>
+    <string name="snackbarSaveSuccess">%1$dゲーム保存しました</string>
+    <string name="snackbarSaveEmpty">設定を保存しました（購入なし）</string>
+    <string name="dialogOverwriteTitle">既存の設定を上書き</string>
+    <string name="dialogOverwriteMessage">設定済みのゲームがすべて置き換えられます。続けますか？</string>
+    <string name="buttonOverwrite">上書き</string>
+    <string name="snackbarUndoAction">元に戻す</string>
+    <string name="snackbarAllAutoApplied">すべて自動に設定しました</string>
+    <string name="snackbarAppliedToAll">全組に同じ番号を適用しました</string>
+    <string name="cdDigitFilled">6桁のうち%1$s、値%2$d</string>
+    <string name="cdDigitEmpty">6桁のうち%1$s、未入力</string>
+    <string name="cdConfirmReadback">第%1$d組 %2$s を適用しました</string>
+    <string name="cdKeypadDigit">数字%1$dを入力</string>
+    <string name="cdBackspace">削除</string>
+    <string-array name="digitPlaceNames">
+        <item>1桁目（10万の位）</item>
+        <item>2桁目（万の位）</item>
+        <item>3桁目（千の位）</item>
+        <item>4桁目（百の位）</item>
+        <item>5桁目（十の位）</item>
+        <item>6桁目（一の位）</item>
+    </string-array>
 
     <string name="historyTitle">購入履歴</string>
     <string name="historyNoRecords">購入履歴がありません</string>

@@ -2,7 +2,7 @@
 <!-- en (원본 app_en.arb 1:1 포트). -->
 <resources>
     <string name="nav_home">Home</string>
-    <string name="nav_numbers">Purchase</string>
+    <string name="nav_numbers">Numbers</string>
     <string name="nav_history">History</string>
     <string name="nav_settings">Settings</string>
 
@@ -12,7 +12,7 @@
     <string name="autoPurchaseDisabled">Auto Purchase Disabled</string>
     <string name="autoPurchaseSchedule">Auto purchase at %1$s</string>
     <string name="enableInSettings">Enable in Settings</string>
-    <string name="buttonSetupNumbers">🎯 Set Up Purchase</string>
+    <string name="buttonSetupNumbers">🎯 Set numbers</string>
 
     <string name="countdownTitle">Draw #%1$d in</string>
     <string name="countdownDays">D</string>
@@ -43,7 +43,60 @@
     <string name="purchaseGamesCountHint">Choose how many tickets to auto-purchase weekly (1–5)</string>
     <string name="purchaseManualComingSoon">Manual group/number selection is coming soon</string>
 
-    <string name="numberSetupTitle">Purchase Setup</string>
+    <string name="numberSetupTitle">Number Setup</string>
+
+    <!-- "Numbers" tab (manual game setup) -->
+    <string name="numberSetupInstruction">Set the group and numbers for slots A–E (up to 5 games). Saving only stores settings; purchasing is coming soon.</string>
+    <string name="numberGateBannerDesc">Settings are saved, but purchasing is coming soon</string>
+    <string name="buttonAllAuto">All Auto</string>
+    <string name="rollingAllAuto">Auto-assigning…</string>
+    <string name="groupSelectorLabel">Group</string>
+    <string name="groupAuto">Auto</string>
+    <string name="numberModeAuto">Auto</string>
+    <string name="numberModeManual">Manual</string>
+    <string name="pickGroupPrompt">Select a group first</string>
+    <string name="fullAutoCardTitle">Full Auto</string>
+    <string name="fullAutoCardDesc">Both group and numbers are auto-assigned by the server at purchase</string>
+    <string name="semiAutoCardTitle">Auto-assigned Numbers</string>
+    <string name="semiAutoCardDesc">Numbers are auto-assigned within the selected group</string>
+    <string name="numberInputSectionTitle">Enter Numbers</string>
+    <string name="applyToAllGroups">Apply to all groups</string>
+    <string name="buttonConfirmGame">Apply game %1$s</string>
+    <string name="buttonReset">Clear</string>
+    <string name="duplicateManualError">Same group and number already exists</string>
+    <string name="gameSummaryTitle">Game Summary</string>
+    <string name="gameSummaryNotSet">Not set</string>
+    <string name="gameSummarySelecting">Selecting</string>
+    <string name="gameSummaryFullAuto">Full auto</string>
+    <string name="gameSummarySemiAuto">Group %1$d · auto number</string>
+    <string name="gameSummaryManual">Group %1$d  %2$s</string>
+    <string name="fallbackPolicyLabel">If the number is taken</string>
+    <string name="fallbackKeepGroup">Keep group · reassign number</string>
+    <string name="fallbackGiveUp">Give up</string>
+    <string name="buttonSaveGames">Save %1$d games</string>
+    <string name="buttonSaveEmpty">Save (no purchase)</string>
+    <string name="buttonSaveDone">Saved</string>
+    <string name="snackbarSaveSuccess">Saved %1$d games</string>
+    <string name="snackbarSaveEmpty">Settings saved (no purchase)</string>
+    <string name="dialogOverwriteTitle">Overwrite existing setup</string>
+    <string name="dialogOverwriteMessage">All configured games will be replaced. Continue?</string>
+    <string name="buttonOverwrite">Overwrite</string>
+    <string name="snackbarUndoAction">Undo</string>
+    <string name="snackbarAllAutoApplied">Set all to auto</string>
+    <string name="snackbarAppliedToAll">Applied the number to all groups</string>
+    <string name="cdDigitFilled">%1$s of six, value %2$d</string>
+    <string name="cdDigitEmpty">%1$s of six, empty</string>
+    <string name="cdConfirmReadback">Group %1$d, %2$s applied</string>
+    <string name="cdKeypadDigit">Enter digit %1$d</string>
+    <string name="cdBackspace">Delete</string>
+    <string-array name="digitPlaceNames">
+        <item>1st digit (100,000s)</item>
+        <item>2nd digit (10,000s)</item>
+        <item>3rd digit (1,000s)</item>
+        <item>4th digit (100s)</item>
+        <item>5th digit (10s)</item>
+        <item>6th digit (1s)</item>
+    </string-array>
 
     <string name="historyTitle">Purchase History</string>
     <string name="historyNoRecords">No purchase records</string>

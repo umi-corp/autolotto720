@@ -22,12 +22,15 @@ object SecureKeys {
     const val BALANCE_ALERT_THRESHOLD = "balance_alert_threshold"
     const val BALANCE_ALERT_LAST_DATE = "balance_alert_last_date"
 
+    /** "번호" 탭 설정(NumberConfig720 JSON) — 5슬롯 sealed 상태·폴백정책·schemaVersion·revision. */
+    const val NUMBER_CONFIG = "number_config"
+
     /** 네이티브 전용(Flutter에 없던 키) — 자동구매 중복 결제 방지용 마지막 구매 회차. ALL(이관 목록) 미포함. */
     const val LAST_PURCHASED_ROUND = "last_purchased_round"
 
     /** 마이그레이션·일괄 처리용 전체 키 목록. */
     val ALL = listOf(
-        USER_ID, PASSWORD, AUTO_ENABLED, AUTO_GAMES,
+        USER_ID, PASSWORD, AUTO_ENABLED, AUTO_GAMES, NUMBER_CONFIG,
         AUTO_PURCHASE_DAY, AUTO_PURCHASE_HOUR, AUTO_PURCHASE_MINUTE, LANGUAGE,
         BALANCE_ALERT_ENABLED, BALANCE_ALERT_THRESHOLD, BALANCE_ALERT_LAST_DATE,
     )
@@ -104,6 +107,14 @@ class SecureStore(context: Context) {
 
     /** int.tryParse(val ?? '') ?? 0 와 동일. */
     fun getAutoGames(): Int = prefs.getString(SecureKeys.AUTO_GAMES, null)?.toIntOrNull() ?: 0
+
+    // === "번호" 탭 설정 (NumberConfig720 JSON) ===
+
+    /** committed 5슬롯+폴백정책+revision JSON 저장. 저장은 구매를 무장하지 않는다(게이트·동의 별개). */
+    fun setNumberConfig(json: String) = putString(SecureKeys.NUMBER_CONFIG, json)
+
+    /** 저장된 JSON(없으면 null → 마이그레이션/기본값 폴백). 파싱·sanitize는 [NumberConfig720.fromJson]. */
+    fun getNumberConfig(): String? = prefs.getString(SecureKeys.NUMBER_CONFIG, null)
 
     // === 구매 시간 설정 ===
 

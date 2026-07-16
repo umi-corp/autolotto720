@@ -5,7 +5,10 @@ import android.content.Context
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.umicorp.autolotto720.data.FallbackPolicy
+import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.SecureStore
+import com.umicorp.autolotto720.data.Slot720
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
 import com.umicorp.autolotto720.dhlottery.HistoryService720
@@ -65,6 +68,10 @@ class AppContainer(context: Context) {
     private val _autoGames = MutableStateFlow(0)
     val autoGames: StateFlow<Int> = _autoGames.asStateFlow()
 
+    // "번호" 탭 설정(5슬롯 sealed 상태·폴백정책). 화면 하이드레이션의 단일 출처.
+    private val _numberConfig = MutableStateFlow(NumberConfig720.empty())
+    val numberConfig: StateFlow<NumberConfig720> = _numberConfig.asStateFlow()
+
     private val _autoPurchaseDay = MutableStateFlow(4)     // 기본 목요일(720 추첨일) — SecureStore 기본값과 동일
     val autoPurchaseDay: StateFlow<Int> = _autoPurchaseDay.asStateFlow()
 
@@ -99,6 +106,7 @@ class AppContainer(context: Context) {
     suspend fun loadSettings() = withContext(Dispatchers.IO) {
         _autoEnabled.value = store.getAutoEnabled()
         _autoGames.value = store.getAutoGames()
+        _numberConfig.value = loadNumberConfig()
         _autoPurchaseDay.value = store.getAutoPurchaseDay()
         _autoPurchaseHour.value = store.getAutoPurchaseHour()
         _autoPurchaseMinute.value = store.getAutoPurchaseMinute()
@@ -191,6 +199,41 @@ class AppContainer(context: Context) {
         store.setAutoGames(n)
     }
 
+    // === "번호" 탭 설정 (§10 마이그레이션·§3 sanitize) ===
+
+    /**
+     * 저장 JSON → 설정. 없으면 구 매수(AUTO_GAMES)에서 마이그레이션(앞 N슬롯 FullAuto), 그것도 없으면 빈 설정.
+     * 손상/미지 스키마는 [NumberConfig720.fromJson]이 안전 기본값으로 떨어뜨린다. 구매 동의는 승계하지 않는다.
+     */
+    private fun loadNumberConfig(): NumberConfig720 {
+        NumberConfig720.fromJson(store.getNumberConfig())?.let { return it }
+        val legacyGames = store.getAutoGames()
+        if (legacyGames <= 0) return NumberConfig720.empty()
+        // 마이그레이션분을 1회 영속화 → 이후 단일 출처가 되고, 화면 saved 표기가 정합(미영속인데 저장됨 오표기 방지).
+        val migrated = NumberConfig720.migrateFromAutoGames(legacyGames)
+        store.setNumberConfig(migrated.toJson())
+        return migrated
+    }
+
+    /**
+     * committed 5슬롯+폴백정책 영속화. revision은 단조 증가(원복해도 신규). 게임 수(autoGames)도 함께 반영.
+     * **저장이 구매를 무장하지 않는다** — autoEnabled/게이트/동의는 건드리지 않는다(설계 §9, 안전조건).
+     */
+    suspend fun saveNumberConfig(slots: List<Slot720>, fallback: FallbackPolicy) = withContext(Dispatchers.IO) {
+        val next = NumberConfig720(
+            slots = slots,
+            fallback = fallback,
+            schemaVersion = NumberConfig720.CURRENT_SCHEMA,
+            revision = _numberConfig.value.revision + 1,
+        )
+        store.setNumberConfig(next.toJson())
+        _numberConfig.value = next
+        // 게임 수는 설정된(non-Unset) 슬롯 수와 동기화(설정 화면 표기·구 워커 매수 키 정합). 구매 활성화 아님.
+        // ponytail: 임시 브리지 — 게이트 오픈 후 워커가 numberConfig를 단일 출처로 삼으면 이 autoGames 미러링은 제거 예정.
+        _autoGames.value = next.gameCount
+        store.setAutoGames(next.gameCount)
+    }
+
     suspend fun setAutoPurchaseDay(day: Int) = withContext(Dispatchers.IO) {
         _autoPurchaseDay.value = day
         store.setAutoPurchaseDay(day)            // 스토어 먼저 — 스케줄러가 스토어를 다시 읽는다
@@ -229,6 +272,7 @@ class AppContainer(context: Context) {
         _balance.value = 0
         _autoEnabled.value = false
         _autoGames.value = 0
+        _numberConfig.value = NumberConfig720.empty()
         _autoPurchaseDay.value = 4
         _autoPurchaseHour.value = 9
         _autoPurchaseMinute.value = 0

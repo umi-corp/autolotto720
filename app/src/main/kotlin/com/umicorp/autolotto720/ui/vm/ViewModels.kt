@@ -3,6 +3,8 @@ package com.umicorp.autolotto720.ui.vm
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umicorp.autolotto720.AppContainer
+import com.umicorp.autolotto720.data.FallbackPolicy
+import com.umicorp.autolotto720.data.Slot720
 import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.data.WinningNumbers720
 import com.umicorp.autolotto720.dhlottery.Round720
@@ -67,18 +69,21 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
 }
 
 /**
- * 구매조건 설정(원 NumberViewModel 대체, Task12): 자동 구매 on/off + 매수(1~5, v1 자동배정 전용).
+ * "번호" 탭(수동 게임 설정, 설계 §3~§10): 5슬롯 sealed 상태 + 폴백정책 설정을 저장한다.
  * 720 온라인 구매는 [com.umicorp.autolotto720.dhlottery.Feature720.PURCHASE_ENABLED] 게이트 —
- * 화면이 배너로 "준비 중"을 알리고 on/off 스위치를 잠근다. 매수 설정은 게이트와 무관하게 저장해
- * 둔다(게이트가 열리면 그대로 쓰인다).
+ * 화면은 "준비 중" 배너를 유지하고 자동구매 on/off 스위치를 잠근다. **설정 저장은 허용하되 구매는
+ * 게이트**(저장이 구매를 무장하지 않음 — 설계 §9).
  */
 class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() {
     val autoEnabled = container.autoEnabled
-    val autoGames = container.autoGames
+    val config = container.numberConfig
 
     fun setAutoEnabled(v: Boolean) { viewModelScope.launch { container.setAutoEnabled(v) } }
 
-    fun setAutoGames(n: Int) { viewModelScope.launch { container.setAutoGames(n.coerceIn(1, 5)) } }
+    /** committed 5슬롯+폴백정책 저장(revision 단조 증가). 구매는 활성화하지 않는다. */
+    fun saveConfig(slots: List<Slot720>, fallback: FallbackPolicy) {
+        viewModelScope.launch { container.saveNumberConfig(slots, fallback) }
+    }
 }
 
 /**
