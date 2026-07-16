@@ -37,6 +37,24 @@ object Crypto720 {
         return encryptWith(plain, jsessionId, salt, iv)
     }
 
+    /**
+     * 요청 본문 "q="에 실을 와이어 값 — 프로덕션 encrypt.js의 커스텀 urlEncode + jQuery serialize의
+     * encodeURIComponent, 즉 **이중 인코딩**과 동치(라이브 서버가 form-decode→urlDecode 2단계로 복원).
+     * [encrypt]의 raw q는 hex(0-9a-f) + 표준 base64(A-Za-z0-9+/=)뿐이라, base64 특수문자 세 개만 변환된다:
+     *   '+' → %252B, '/' → %2F, '=' → %3D. 나머지는 그대로.
+     * 본문을 이 값으로 직접 만들어 `session.post(url, "q=$wire", …)`로 보낸다(FormBody 재인코딩 회피).
+     */
+    fun wireQ(rawQ: String): String = buildString {
+        for (c in rawQ) append(
+            when (c) {
+                '+' -> "%252B"
+                '/' -> "%2F"
+                '=' -> "%3D"
+                else -> c
+            },
+        )
+    }
+
     /** q(hex+hex+base64) → 평문(UTF-8). */
     fun decrypt(encText: String, jsessionId: String): String {
         val salt = encText.substring(0, 64).hexToBytes()

@@ -59,6 +59,22 @@ class DomainCookieStore {
     @Synchronized
     fun hasCookie(name: String): Boolean = domainCookies.values.any { it.containsKey(name) }
 
+    /** [host]에 전송될 쿠키 중 [name]의 값 (도메인 매칭 규칙은 [cookieHeader]와 동일). 없으면 null.
+     *  720 구매 암호화 passphrase(el JSESSIONID) 조회용 — el 세션과 www 세션의 JSESSIONID가 다를 수 있어
+     *  전역이 아닌 host 기준으로 정확히 뽑아야 한다. */
+    @Synchronized
+    fun cookieValue(host: String, name: String): String? {
+        var value: String? = null
+        for ((domain, cookies) in domainCookies) {
+            if (domain.startsWith(".")) {
+                val suffix = domain.substring(1)
+                if (host == suffix || host.endsWith(".$suffix")) cookies[name]?.let { value = it }
+            }
+        }
+        domainCookies[host]?.get(name)?.let { value = it }  // 정확 일치가 도메인 매칭을 덮어씀(최종 우선)
+        return value
+    }
+
     @Synchronized
     fun keysForDomain(domain: String): List<String> =
         domainCookies[domain]?.keys?.toList() ?: emptyList()

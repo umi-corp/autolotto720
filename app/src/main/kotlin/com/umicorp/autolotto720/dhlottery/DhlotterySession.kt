@@ -23,11 +23,13 @@ import java.util.concurrent.TimeUnit
 class DhlotterySession(
     val baseUrl: String = ApiConstants.DEFAULT_BASE,
     val olottoUrl: String = ApiConstants.DEFAULT_OLOTTO,
+    val elUrl: String = ApiConstants.DEFAULT_EL,
 ) {
     val cookies = DomainCookieStore()
 
     fun base(path: String): String = baseUrl + path
     fun ol(path: String): String = olottoUrl + path
+    fun el(path: String): String = elUrl + path
 
     private val client: OkHttpClient = OkHttpClient.Builder()
         .followRedirects(false)
