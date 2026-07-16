@@ -16,3 +16,7 @@ key.properties
 .kotlin/
 .omc/
 scratchpad/
+
+key.properties
+*.jks
+autolotto720-key.jks

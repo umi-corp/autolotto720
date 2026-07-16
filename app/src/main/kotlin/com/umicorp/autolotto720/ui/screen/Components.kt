@@ -269,14 +269,14 @@ fun CtaButton(
     )
 }
 
-/** 은은한 크림 페이지 배경(부드러운 피치 blob 느낌). 스크린 루트에 붙일 수 있는 헬퍼. */
+/** 은은한 쿨 페이지 배경(상단 에메랄드 워시). 스크린 루트에 붙일 수 있는 헬퍼. */
 @Composable
 fun Modifier.creamPageBackground(): Modifier {
     val scheme = MaterialTheme.colorScheme
     return this.background(
         Brush.verticalGradient(
             listOf(
-                lerp(scheme.background, Color(0xFFF7D9B8), 0.10f),
+                lerp(scheme.background, Color(0xFF0E9E57), 0.06f),
                 scheme.background,
             ),
         ),

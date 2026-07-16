@@ -52,7 +52,7 @@ fun SplashScreen(container: AppContainer, onFinished: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF15152D), Color(0xFF1E2D50)))),
+            .background(Brush.verticalGradient(listOf(Color(0xFF0E1330), Color(0xFF1E2D50)))),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -71,7 +71,7 @@ fun SplashScreen(container: AppContainer, onFinished: () -> Unit) {
             Spacer(Modifier.height(40.dp))
             CircularProgressIndicator(
                 modifier = Modifier.size(28.dp),
-                color = Color.White.copy(alpha = 0.8f),
+                color = Color(0xFF26D967),
                 strokeWidth = 2.5.dp,
             )
         }
