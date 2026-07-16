@@ -12,6 +12,7 @@ import com.umicorp.autolotto720.data.Slot720
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
 import com.umicorp.autolotto720.dhlottery.HistoryService720
+import com.umicorp.autolotto720.dhlottery.PurchaseService720
 import com.umicorp.autolotto720.dhlottery.ResultService720
 import com.umicorp.autolotto720.scheduler.AlarmScheduler
 import com.umicorp.autolotto720.scheduler.BalanceAlert
@@ -172,6 +173,24 @@ class AppContainer(context: Context) {
         _isLoggedIn.value = false
         _balance.value = 0
         _loggedInUserId.value = null
+    }
+
+    /**
+     * [DEBUG 전용] 감독 하 단발 반자동 1매 실구매 — el AES 계약(PurchaseService720) 실기기 검증용.
+     * 스케줄 자동구매(AutoPurchaseWorker의 [com.umicorp.autolotto720.dhlottery.Feature720] 게이트)와는 독립.
+     * connPro는 비멱등이라 실패해도 재시도하지 않고 결과 문자열만 돌려준다(호출부가 사용자에게 표시).
+     */
+    suspend fun debugPurchaseOne(): String = withContext(Dispatchers.IO) {
+        if (!_isLoggedIn.value) return@withContext "로그인 후 시도하세요"
+        try {
+            val result = PurchaseService720(auth, session).purchase(games = 1)
+            refreshBalance()
+            val t = result.tickets.firstOrNull()
+            if (t != null) "구매 성공: ${t.jo}조 ${t.number} (${result.round}회, ₩${result.amount})"
+            else "구매 응답에 티켓 정보 없음 (내역 확인 필요)"
+        } catch (e: Exception) {
+            "구매 실패: ${e.message}"
+        }
     }
 
     /** 잔액 재조회 + 잔액부족 체크(원본 home/_refreshBalance). */

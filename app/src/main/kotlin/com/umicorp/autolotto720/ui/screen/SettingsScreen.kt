@@ -160,6 +160,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
     var showReset by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showThreshold by remember { mutableStateOf(false) }
+    var showDebugPurchase by remember { mutableStateOf(false) }  // DEBUG 전용 실구매 확인
+    var debugBusy by remember { mutableStateOf(false) }
 
     // 로그인 결과 → 스낵바(원본 _login의 try/catch 스낵바). consume 후 Idle 복귀.
     LaunchedEffect(loginState) {
@@ -461,11 +463,48 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
                     trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 )
             }
+            // ===== [DEBUG 전용] 실구매 계약 검증 =====
+            if (BuildConfig.DEBUG) {
+                Spacer(Modifier.height(24.dp))
+                SettingsSection("🧪 개발자 테스트") {
+                    ListItem(
+                        modifier = Modifier.clickable(enabled = isLoggedIn && !debugBusy) { showDebugPurchase = true },
+                        colors = transparentListColors(),
+                        leadingContent = { SettingIcon(Icons.Rounded.ConfirmationNumber, LgAmber) },
+                        headlineContent = { Text("테스트 구매 1매 (실결제 ₩1,000)", fontWeight = FontWeight.Bold) },
+                        supportingContent = {
+                            Text(
+                                if (!isLoggedIn) "로그인 후 사용 가능"
+                                else if (debugBusy) "구매 진행 중…"
+                                else "감독 하 반자동 1매 실구매 — el AES 계약 검증",
+                            )
+                        },
+                    )
+                }
+            }
             Spacer(Modifier.height(40.dp))
         }
     }
 
     // ===== 다이얼로그 =====
+    if (showDebugPurchase) {
+        AlertDialog(
+            onDismissRequest = { showDebugPurchase = false },
+            title = { Text("테스트 구매 확인", fontWeight = FontWeight.Bold) },
+            text = { Text("반자동 1매를 실제로 구매합니다. 예치금에서 ₩1,000이 차감되며 되돌릴 수 없습니다. 진행할까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDebugPurchase = false
+                    debugBusy = true
+                    vm.debugTestPurchase { result ->
+                        debugBusy = false
+                        scope.launch { snackbar.showSnackbar(result) }
+                    }
+                }) { Text("구매", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { showDebugPurchase = false }) { Text("취소") } },
+        )
+    }
     if (showLogin) {
         LoginDialog(
             onDismiss = { showLogin = false },

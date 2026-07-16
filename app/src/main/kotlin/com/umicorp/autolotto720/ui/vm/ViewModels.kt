@@ -210,6 +210,11 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun logout() { viewModelScope.launch { container.logout() } }
     fun refreshBalance() { viewModelScope.launch { container.refreshBalance() } }
 
+    /** [DEBUG 전용] 감독 하 단발 1매 실구매 → 결과 문자열 콜백(스낵바 표시용). */
+    fun debugTestPurchase(onResult: (String) -> Unit) {
+        viewModelScope.launch { onResult(container.debugPurchaseOne()) }
+    }
+
     fun setAutoEnabled(v: Boolean) { viewModelScope.launch { container.setAutoEnabled(v) } }
 
     /** 요일 변경. 저장된 시:분과 조합한 후보가 구매 불가 시간이면 false 반환(원본 검증 스낵바). */
