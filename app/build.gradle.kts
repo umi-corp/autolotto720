@@ -37,6 +37,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // 감독 실구매 검증용: debug 빌드를 release 키로 서명 → 폰의 release 설치본 위에 데이터 손실 없이
+            // 업데이트 설치 가능(BuildConfig.DEBUG=true 유지라 '테스트 구매' 버튼 노출). key.properties 있을 때만.
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
@@ -57,6 +64,8 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = false
+        // android.util.Log 등 android.jar 스텁 메서드가 "not mocked" 예외 대신 기본값 반환(구매 단계 로깅용).
+        unitTests.isReturnDefaultValues = true
     }
 
     compileOptions {

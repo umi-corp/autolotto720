@@ -15,9 +15,20 @@ package com.umicorp.autolotto720.dhlottery
 class DomainCookieStore {
     private val domainCookies = LinkedHashMap<String, LinkedHashMap<String, String>>()
 
+    // freeze된 쿠키명은 Set-Cookie로 갱신하지 않는다 — 720 구매 4단계 동안 el JSESSIONID를 고정해
+    // 주문(makeOrderNo)과 결제(connPro)가 같은 세션에 묶이게 한다(서버 세션 회전 시 주문 유실 방지).
+    private val frozen = HashSet<String>()
+
+    @Synchronized
+    fun freeze(name: String) { frozen.add(name) }
+
+    @Synchronized
+    fun unfreeze(name: String) { frozen.remove(name) }
+
     @Synchronized
     fun clear() {
         domainCookies.clear()
+        frozen.clear()
     }
 
     /** 요청 host에 보낼 Cookie 헤더 ("k=v; k=v"). 없으면 빈 문자열. */
@@ -43,6 +54,7 @@ class DomainCookieStore {
             if (eqIdx < 1) continue
             val name = mainPart.substring(0, eqIdx).trim()
             val value = mainPart.substring(eqIdx + 1).trim()
+            if (name in frozen) continue  // 고정된 쿠키(구매 중 JSESSIONID)는 회전 무시
 
             var domain = requestHost
             val lower = cookie.lowercase()
