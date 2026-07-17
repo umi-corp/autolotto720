@@ -156,8 +156,12 @@ class PurchaseService720(
 
     /**
      * 수동 지정번호([number] in 조 [jo])의 구매 가능(비점유) 여부를 checkVerifyNo로 확인한다(무결제).
-     * verifyYn=="Y" 이고 추천(recommendYN=="Y", 이미 점유돼 대체번호 안내) 상태가 아니면 구매 가능.
-     * ⚠️ 이 경로는 라이브 검증 전 — 감독 하 실기기 테스트로 확정 후 게이트를 연다.
+     *
+     * 라이브 응답(실측): resultMsg가 슬래시 구분 문자열
+     *   `resultCode/verifyYn/recommendYN/회차/셋트/조들/번호들/타입`
+     *   예) 가능 `100/Y/N/325/S/1/483010/M` · 점유 `100/Y/Y/325/S/1,1,1,1,1/917128,…/A`(서버 추천번호 동반)
+     * verifyYn=="Y" 이고 recommendYN=="N"(점유 아님)이면 구매 가능. 슬래시 파싱을 우선하되,
+     * 형식이 바뀌면 동일 이름의 JSON 필드로 폴백한다.
      */
     private fun verifyManualAvailable(round: Int, jo: Int, number: String): Boolean {
         val r = encStep(ApiConstants.CHECK_VERIFY_NO_720, buildPlain(
@@ -165,9 +169,12 @@ class PurchaseService720(
             "AUTO_SEL_SET" to "S", "SEL_CLASS" to jo.toString(), "BUY_TYPE" to "M", "ACCS_TYPE" to "01",
         ))
         if (r.optString("resultCode") != "100") return false
-        val verified = r.optString("verifyYn").equals("Y", ignoreCase = true)
-        val recommended = r.optString("recommendYN").equals("Y", ignoreCase = true)  // 점유 → 대체 안내
-        return verified && !recommended
+        val tokens = r.optString("resultMsg").split("/")
+        val verifyYn = tokens.getOrNull(1)?.trim().takeIf { !it.isNullOrEmpty() }
+            ?: r.optString("verifyYn")
+        val recommendYn = tokens.getOrNull(2)?.trim().takeIf { !it.isNullOrEmpty() }
+            ?: r.optString("recommendYN")
+        return verifyYn.equals("Y", ignoreCase = true) && !recommendYn.equals("Y", ignoreCase = true)  // 점유(추천) 아님
     }
 
     /**

@@ -10,5 +10,7 @@ package com.umicorp.autolotto720.dhlottery
  * 둔다 — 캡처 완료 시 이 값만 true로 뒤집는다.
  */
 object Feature720 {
-    const val PURCHASE_ENABLED = false
+    // 실서버 E2E 검증 완료(자동/반자동/수동/폴백 + 내역) → 스케줄 무인 자동구매 무장.
+    // 사용자 명시 동의로 게이트 오픈(기존 '참관 하 1건씩' 원칙 해제). 워커의 회차 멱등·판매마감·비재시도 가드 유효.
+    const val PURCHASE_ENABLED = true
 }

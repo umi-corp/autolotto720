@@ -149,8 +149,9 @@ class PurchaseService720Test {
                 req.path == "/game/pension720/game.jsp" ->
                     MockResponse().setBody("""<input type="hidden" name="USER_ID" value="tester99"/>""")
                         .addHeader("Set-Cookie", "JSESSIONID=$jses; Path=/")
+                // 실측 형식: resultMsg=resultCode/verifyYn/recommendYN/회차/셋트/조/번호/타입 (N=가능, Y=점유)
                 req.path == "/checkVerifyNo.do" ->
-                    enc("""{"resultCode":"100","verifyYn":"Y","recommendYN":"${if (available) "N" else "Y"}"}""")
+                    enc("""{"resultCode":"100","resultMsg":"100/Y/${if (available) "N" else "Y"}/325/S/$jo/$number/M"}""")
                 req.path == "/makeAutoNo.do" ->  // 폴백 자동 배정용
                     enc("""{"resultCode":"100","selClsNo":"$autoJo","selLotNo":"$autoNumber","round":"325"}""")
                 req.path == "/makeOrderNo.do" ->

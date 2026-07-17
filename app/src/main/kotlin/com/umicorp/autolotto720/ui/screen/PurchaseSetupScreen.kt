@@ -310,27 +310,6 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                     .verticalScroll(rememberScrollState())
                     .padding(20.dp),
             ) {
-                // 게이트 배너(§9) — 설정 저장은 허용, 실제 구매는 준비 중.
-                TonalCard(accent = LgAmber, contentPadding = PaddingValues(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.WarningAmber, null, tint = LgAmber, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                stringResource(R.string.purchaseComingSoonTitle),
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            Text(
-                                stringResource(R.string.numberGateBannerDesc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-
                 TonalCard(accent = LgTeal, contentPadding = PaddingValues(16.dp)) {
                     Text(
                         stringResource(R.string.numberSetupInstruction),

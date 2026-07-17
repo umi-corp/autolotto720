@@ -3,6 +3,7 @@ package com.umicorp.autolotto720.scheduler
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.SecureStore
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
@@ -81,10 +82,11 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
             val userId = cred.userId
             val password = cred.password
             val autoEnabled = store.getAutoEnabled()
-            val games = store.getAutoGames()
+            // 번호 탭 설정(조/번호)을 단일 출처로 — 슬롯별 자동/반자동/수동을 그대로 산다(매수만이 아님).
+            val config = NumberConfig720.fromJson(store.getNumberConfig()) ?: NumberConfig720.empty()
 
             if (!autoEnabled || userId == null || password == null) return
-            if (games == 0) return
+            if (config.gameCount == 0) return
 
             step = "feature_gate"
             // ponytail: 구매 계약(AES, pension.js) 미확보 — 게이트 켜지기 전까지 조용히 무동작(재시도 없음).
@@ -120,7 +122,7 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
             step = "purchase"
             val purchaseService = PurchaseService720(auth, session)
             try {
-                val result = purchaseService.purchase(games = games)
+                val result = purchaseService.purchase(config)
 
                 // 성공 즉시 회차 기록(commit) — 이후 재실행은 round_guard가 차단.
                 // ponytail: 서버 처리~기록 사이 찰나에 킬되는 창은 남는다(중복결제 double-charge ceiling,
