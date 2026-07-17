@@ -347,12 +347,16 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
 
                 // 모드 세그먼트 — [슬롯별] / [모든조 세트]. 세트 토글은 즉시 저장(revision 증가) —
                 // 세트는 조 편집이 없어 토글 자체가 확정이다. saved 색은 committed+세트가 영속됨을 반영.
+                // saved는 commit 성공 후에만 켠다(낙관 반영 금지) — 저장 완료 전엔 saved=false라 첫 구매 CTA가 결제를 막는다.
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = !setMode,
                         enabled = !locked,
                         onClick = {
-                            if (setMode) { setMode = false; vm.saveConfig(committed.toList(), fallback, false); saved = true }
+                            if (setMode) {
+                                setMode = false; saved = false
+                                scope.launch { saved = vm.saveConfigAwait(committed.toList(), fallback, false) }
+                            }
                         },
                         label = { Text(stringResource(R.string.slotModeLabel), fontWeight = FontWeight.Bold) },
                         modifier = Modifier.weight(1f),
@@ -361,7 +365,10 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                         selected = setMode,
                         enabled = !locked,
                         onClick = {
-                            if (!setMode) { setMode = true; vm.saveConfig(committed.toList(), fallback, true); saved = true }
+                            if (!setMode) {
+                                setMode = true; saved = false
+                                scope.launch { saved = vm.saveConfigAwait(committed.toList(), fallback, true) }
+                            }
                         },
                         label = { Text(stringResource(R.string.setModeLabel), fontWeight = FontWeight.Bold) },
                         modifier = Modifier.weight(1f),
@@ -1165,7 +1172,8 @@ private fun InstantPurchaseDialogs(state: InstantState, vm: PurchaseSetupViewMod
             title = { Text(stringResource(R.string.instantConfirmTitle)) },
             text = {
                 if (state.config.setMode) {
-                    Text(stringResource(R.string.setModeConfirm))
+                    // 세트 확정도 슬롯 모드처럼 회차를 표시 — "expectedRound=사용자가 본 회차" 계약 유지(₩5,000 고정).
+                    Text(stringResource(R.string.setModeConfirm, state.round))
                 } else {
                     Text(
                         stringResource(

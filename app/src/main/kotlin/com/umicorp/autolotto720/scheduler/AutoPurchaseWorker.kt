@@ -199,8 +199,9 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                     when (classifyPurchaseFailure(purchaseError)) {
                         is PurchaseFailure.Rejected -> store.clearPendingPurchase()   // 무결제 확정 — PENDING 해제
                         is PurchaseFailure.Unknown -> withContext(NonCancellable) {   // 결과 불명 — 가드 커밋 + 전액 원장 + PENDING 유지(즉시구매와 대칭, CE가 보상을 끊지 못하게)
-                            store.setLastPurchase(round, userId)
-                            recordSpendWorker(store, round, today, attempt)
+                            // money-path 방호: 원장/가드 commit 예외가 아래 [purchase] 래핑을 이탈하지 않게 runCatching(즉시구매와 대칭).
+                            runCatching { store.setLastPurchase(round, userId) }
+                            runCatching { recordSpendWorker(store, round, today, attempt) }
                         }
                     }
                     throw Exception(purchaseError.message ?: "$purchaseError")   // [purchase] 래핑 → 비재시도
@@ -209,7 +210,8 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 // 성공 원장+commit 보상은 취소 불가 구간에서 — CE가 커밋을 끊지 못하게(즉시구매와 대칭, F3).
                 withContext(NonCancellable) {
                     // 확정 성공/부분 — 원장에 지출 기록(부분은 시도 전액). PENDING 해제는 아래 commit 성공 후.
-                    val ledgerOk = recordSpendWorker(store, round, today, if (r.partialFailure != null) attempt else r.amount)
+                    // money-path 방호: recordSpendWorker(commit) 예외가 [commit] 커밋 경로를 이탈하지 않게 runCatching(즉시구매와 대칭).
+                    val ledgerOk = runCatching { recordSpendWorker(store, round, today, if (r.partialFailure != null) attempt else r.amount) }.getOrDefault(false)
 
                     // 성공 즉시 회차+계정 기록(commit) — 이후 재실행은 round_guard가 차단.
                     // ponytail: 서버 처리~기록 사이 찰나에 킬되는 창은 남는다(중복결제 double-charge ceiling,
@@ -245,8 +247,14 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 )
             } else {
                 val ticketLines = result.tickets.joinToString("\n") { "${it.jo}조 ${it.number}" }
-                val partialLine = result.partialFailure
-                    ?.let { "\n⚠️ 나머지 ${it.failedGames}게임은 구매되지 않았습니다. 내역을 확인해주세요." } ?: ""
+                // 부분 실패 문구는 결과 확정성으로 분기(UI InstantPartial*와 동일) — Unknown을 "구매 안 됨"으로 단정하면
+                // 재시도를 오유도하므로 "결과를 확인하지 못했습니다 — 내역 확인"으로 가른다.
+                val partialLine = result.partialFailure?.let { pf ->
+                    if (classifyPurchaseFailure(pf.cause) is PurchaseFailure.Unknown)
+                        "\n⚠️ 나머지 ${pf.failedGames}게임은 결과를 확인하지 못했습니다. 내역을 확인해주세요."
+                    else
+                        "\n⚠️ 나머지 ${pf.failedGames}게임은 구매되지 않았습니다. 내역을 확인해주세요."
+                } ?: ""
                 Notifications.show(
                     ctx,
                     "🎰 AutoLotto720 자동 구매 완료!",

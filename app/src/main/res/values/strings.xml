@@ -198,7 +198,7 @@
     <string name="setModeLabel">모든조 세트</string>
     <string name="slotModeLabel">슬롯별</string>
     <string name="setModeInfo">5개 조 전부 같은 번호 1매씩 · 5,000원 · 번호 자동배정</string>
-    <string name="setModeConfirm">모든조 세트 · 5매 · ₩5,000 · 자동배정</string>
+    <string name="setModeConfirm">제 %1$d회 · 모든조 세트 · 5매 · ₩5,000 · 자동배정</string>
     <string name="sectionBudget">💰 예산 한도</string>
     <string name="budgetDailyLabel">1일 예산 한도</string>
     <string name="budgetWeeklyLabel">회차 예산 한도</string>

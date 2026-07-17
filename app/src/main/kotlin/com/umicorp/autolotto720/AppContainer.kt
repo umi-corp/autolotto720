@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.ZonedDateTime
@@ -83,6 +84,10 @@ class AppContainer(context: Context) {
     // "번호" 탭 설정(5슬롯 sealed 상태·폴백정책). 화면 하이드레이션의 단일 출처.
     private val _numberConfig = MutableStateFlow(NumberConfig720.empty())
     val numberConfig: StateFlow<NumberConfig720> = _numberConfig.asStateFlow()
+
+    // 설정 저장 직렬화 락 — read-modify-write(revision 증가)가 빠른 세트 토글에서 병렬 IO로 순서 뒤집혀
+    // 화면 모드와 디스크 모드가 어긋나면(→ worker가 잘못된 금액 결제) 위험. 락을 IO 전환 전에 잡아 launch 순서=저장 순서 보장.
+    private val configMutex = Mutex()
 
     private val _autoPurchaseDay = MutableStateFlow(5)     // 기본 금요일(판매개시 다음날, 지정번호 선점 최적) — SecureStore 기본값과 동일
     val autoPurchaseDay: StateFlow<Int> = _autoPurchaseDay.asStateFlow()
@@ -219,11 +224,15 @@ class AppContainer(context: Context) {
     suspend fun debugPurchaseOne(): String = withContext(Dispatchers.IO) {
         if (!_isLoggedIn.value) return@withContext "로그인 후 시도하세요"
         try {
-            // 번호 탭에 설정된 게임이 있으면 그대로(수동/반자동/전부자동), 없으면 반자동 1매로 계약만 검증.
-            val svc = PurchaseService720(auth, session)
-            val config = _numberConfig.value
-            val round = Round720.getUpcomingDrawRound(ZonedDateTime.now(Round720.KST))   // 회차 주입 — 모든 경로 동일 회차(TOCTOU 제거)
-            val result = if (config.gameCount > 0) svc.purchase(config, round) else svc.purchase(games = 1, round = round)
+            // DEBUG 전용: worker·즉시구매와 실결제 경로를 직렬화(PurchaseLock)만 보장한다. 예산·PENDING 가드는
+            // 계약 검증용이라 의도적으로 생략 — 단, 락은 필수(락 없이 svc.purchase 시 worker와 동시 실결제 가능).
+            val result = PurchaseLock.mutex.withLock {
+                // 번호 탭에 설정된 게임이 있으면 그대로(수동/반자동/전부자동), 없으면 반자동 1매로 계약만 검증.
+                val svc = PurchaseService720(auth, session)
+                val config = _numberConfig.value
+                val round = Round720.getUpcomingDrawRound(ZonedDateTime.now(Round720.KST))   // 회차 주입 — 모든 경로 동일 회차(TOCTOU 제거)
+                if (config.gameCount > 0) svc.purchase(config, round) else svc.purchase(games = 1, round = round)
+            }
             refreshBalance()
             if (result.tickets.isEmpty()) "구매한 게임 없음 (지정번호 점유 + 구매 포기 정책)"
             else "구매 성공: " + result.tickets.joinToString(", ") { "${it.jo}조 ${it.number}" } +
@@ -355,11 +364,12 @@ class AppContainer(context: Context) {
                         throw f.cause                                  // 서버 확정 거절 — 메시지 그대로(재시도 안전)
                     }
                     is PurchaseFailure.Unknown -> {
-                        // 결과 불명 — 회차 가드 커밋 + 시도 전액 원장 기록. 둘 다 성공해야 PENDING 해제(아니면 백업 유지).
+                        // 결과 불명 → 회차 가드 커밋 + 시도 전액 원장 기록만. PENDING은 **항상 유지**(worker Unknown과 대칭).
+                        // extra 구매가 회차 가드를 우회하므로 PENDING을 지우면 결과 불명 회차에 extra로 재진입해 이중결제 가능 —
+                        // "결과 불명 → PENDING 유지" 불변식을 지킨다. 원장 기록은 예외가 오보로 새지 않게 runCatching(money-path 방호).
                         withContext(NonCancellable) {
-                            val g = runCatching { store.setLastPurchase(round, id) }.getOrDefault(false)
-                            val l = recordSpend(round, today, attempt)      // 전액
-                            if (g && l) runCatching { store.clearPendingPurchase() }
+                            runCatching { store.setLastPurchase(round, id) }
+                            runCatching { recordSpend(round, today, attempt) }      // 전액
                         }
                         throw PurchaseResultUnknownException(f.cause)   // 결과 불명 — 재시도 유도 금지
                     }
@@ -369,7 +379,9 @@ class AppContainer(context: Context) {
             withContext(NonCancellable) {
                 _lastPurchasedRound.value = r.round                      // 인메모리 가드(이 세션 CTA 보호)
                 val committed = runCatching { store.setLastPurchase(round, id) }.getOrDefault(false)   // round 주입값과 동일
-                val ledgerOk = recordSpend(round, today, if (r.partialFailure != null) attempt else r.amount)  // 부분은 시도 전액
+                // money-path 방호: recordSpend(EncryptedSharedPreferences commit) 예외가 PurchaseRecordFailedException 경로를
+                // 이탈해 ViewModel 일반 catch → "구매 실패" 오보(결제 완료 후)로 새지 않게 runCatching(setLastPurchase와 일관).
+                val ledgerOk = runCatching { recordSpend(round, today, if (r.partialFailure != null) attempt else r.amount) }.getOrDefault(false)  // 부분은 시도 전액
                 if (committed && ledgerOk) {
                     runCatching { store.clearPendingPurchase() }   // 가드+원장 반영 완료 → PENDING 해제 안전
                 } else {
@@ -424,25 +436,35 @@ class AppContainer(context: Context) {
     /**
      * committed 5슬롯+폴백정책 영속화. revision은 단조 증가(원복해도 신규). 게임 수(autoGames)도 함께 반영.
      * **저장이 구매를 무장하지 않는다** — autoEnabled/게이트/동의는 건드리지 않는다(설계 §9, 안전조건).
+     *
+     * [configMutex]를 **IO 전환 전에** 잡아(호출자가 Main.immediate에서 순차 launch하므로) launch 순서=저장 순서를
+     * 보장한다 — 빠른 세트 토글에서 병렬 IO 저장이 뒤집혀 디스크에 잘못된 setMode가 남는 레이스를 막는다.
+     * commit 성공 시에만 StateFlow(_numberConfig)를 갱신 — 실패 시 화면(낮은 한도)과 디스크(옛 값)가 어긋나지 않게 한다.
+     * @return commit 성공 여부 — 호출자(토글)가 성공 시에만 `saved`를 켜 미저장 구매를 막는다.
      */
     suspend fun saveNumberConfig(
         slots: List<Slot720>,
         fallback: FallbackPolicy,
         setMode: Boolean = _numberConfig.value.setMode,
-    ) = withContext(Dispatchers.IO) {
-        val next = NumberConfig720(
-            slots = slots,
-            fallback = fallback,
-            schemaVersion = NumberConfig720.CURRENT_SCHEMA,
-            revision = _numberConfig.value.revision + 1,
-            setMode = setMode,   // 세트 토글이 저장에서 유실되지 않게 명시 반영(schema 2 파생은 toJson이 담당)
-        )
-        store.setNumberConfig(next.toJson())
-        _numberConfig.value = next
-        // 게임 수는 설정된(non-Unset) 슬롯 수와 동기화(설정 화면 표기·구 워커 매수 키 정합). 구매 활성화 아님.
-        // ponytail: 임시 브리지 — 게이트 오픈 후 워커가 numberConfig를 단일 출처로 삼으면 이 autoGames 미러링은 제거 예정.
-        _autoGames.value = next.gameCount
-        store.setAutoGames(next.gameCount)
+    ): Boolean = configMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val next = NumberConfig720(
+                slots = slots,
+                fallback = fallback,
+                schemaVersion = NumberConfig720.CURRENT_SCHEMA,
+                revision = _numberConfig.value.revision + 1,   // 락 안에서 읽어 RMW 직렬화
+                setMode = setMode,   // 세트 토글이 저장에서 유실되지 않게 명시 반영(schema 2 파생은 toJson이 담당)
+            )
+            val ok = store.setNumberConfig(next.toJson())
+            if (ok) {
+                _numberConfig.value = next   // commit 성공 후에만 반영(낙관 갱신 금지)
+                // 게임 수는 설정된(non-Unset) 슬롯 수와 동기화(설정 화면 표기·구 워커 매수 키 정합). 구매 활성화 아님.
+                // ponytail: 임시 브리지 — 게이트 오픈 후 워커가 numberConfig를 단일 출처로 삼으면 이 autoGames 미러링은 제거 예정.
+                _autoGames.value = next.gameCount
+                store.setAutoGames(next.gameCount)
+            }
+            ok
+        }
     }
 
     suspend fun setAutoPurchaseDay(day: Int) = withContext(Dispatchers.IO) {
@@ -474,14 +496,17 @@ class AppContainer(context: Context) {
         store.setBalanceAlertThreshold(v)
     }
 
+    // 예산 범위 방어(컨테이너 하한/상한) — UI coerceBudget(1,000~150,000)와 동일 경계를 money-path에도 둔다.
+    // commit 성공 후에만 StateFlow 갱신 — 실패 시 화면(낮은 한도)과 구매 가드(옛 높은 한도)가 어긋나지 않게.
+
     suspend fun setDailyBudget(v: Int) = withContext(Dispatchers.IO) {
-        _dailyBudget.value = v
-        store.setDailyBudget(v)
+        val won = v.coerceIn(BUDGET_MIN, BUDGET_MAX)
+        if (store.setDailyBudget(won)) _dailyBudget.value = won
     }
 
     suspend fun setWeeklyBudget(v: Int) = withContext(Dispatchers.IO) {
-        _weeklyBudget.value = v
-        store.setWeeklyBudget(v)
+        val won = v.coerceIn(BUDGET_MIN, BUDGET_MAX)
+        if (store.setWeeklyBudget(won)) _weeklyBudget.value = won
     }
 
     // === 데이터 초기화 (원본 설정 화면 `_showResetDialog`) ===
@@ -582,6 +607,10 @@ fun purchaseGate(extra: Boolean, recordedRound: Int, currentRound: Int, expected
     !extra && recordedRound >= currentRound -> PurchaseGate.ALREADY_PURCHASED
     else -> PurchaseGate.PROCEED
 }
+
+/** 예산 한도 방어 경계(원) — UI coerceBudget(SettingsScreen)과 동일. money-path 하한/상한 클램프. */
+private const val BUDGET_MIN = 1000
+private const val BUDGET_MAX = 150000
 
 /** 설정 기준 시도 금액(원) — 세트 5,000, 슬롯 모드 게임수×1,000. */
 fun attemptAmount(config: NumberConfig720): Int =

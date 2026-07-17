@@ -123,8 +123,9 @@ class SecureStore(context: Context) {
 
     // === "번호" 탭 설정 (NumberConfig720 JSON) ===
 
-    /** committed 5슬롯+폴백정책+revision JSON 저장. 저장은 구매를 무장하지 않는다(게이트·동의 별개). */
-    fun setNumberConfig(json: String) = putString(SecureKeys.NUMBER_CONFIG, json)
+    /** committed 5슬롯+폴백정책+revision JSON 저장. 저장은 구매를 무장하지 않는다(게이트·동의 별개).
+     *  money-path: commit() 반환으로 영속 성공 확인 — 호출부가 실패 시 StateFlow/saved를 낙관 갱신하지 않게 한다. */
+    fun setNumberConfig(json: String): Boolean = prefs.edit().putString(SecureKeys.NUMBER_CONFIG, json).commit()
 
     /** 저장된 JSON(없으면 null → 마이그레이션/기본값 폴백). 파싱·sanitize는 [NumberConfig720.fromJson]. */
     fun getNumberConfig(): String? = prefs.getString(SecureKeys.NUMBER_CONFIG, null)
@@ -187,10 +188,12 @@ class SecureStore(context: Context) {
 
     // === 예산 한도 (사용자 설정, 원 단위) ===
 
-    fun setDailyBudget(won: Int) = putString(SecureKeys.DAILY_BUDGET, won.toString())
+    /** money-path: commit() 반환으로 영속 성공 확인 — false면 호출부가 StateFlow를 낙관 갱신하지 않는다. */
+    fun setDailyBudget(won: Int): Boolean = prefs.edit().putString(SecureKeys.DAILY_BUDGET, won.toString()).commit()
     fun getDailyBudget(): Int = prefs.getString(SecureKeys.DAILY_BUDGET, null)?.toIntOrNull() ?: 5000
 
-    fun setWeeklyBudget(won: Int) = putString(SecureKeys.WEEKLY_BUDGET, won.toString())
+    /** money-path: commit() 반환으로 영속 성공 확인 — false면 호출부가 StateFlow를 낙관 갱신하지 않는다. */
+    fun setWeeklyBudget(won: Int): Boolean = prefs.edit().putString(SecureKeys.WEEKLY_BUDGET, won.toString()).commit()
     fun getWeeklyBudget(): Int = prefs.getString(SecureKeys.WEEKLY_BUDGET, null)?.toIntOrNull() ?: 5000
 
     // === 지출 원장 / PENDING ===

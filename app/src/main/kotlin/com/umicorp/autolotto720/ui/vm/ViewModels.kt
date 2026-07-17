@@ -94,6 +94,14 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
         viewModelScope.launch { container.saveNumberConfig(slots, fallback, setMode) }
     }
 
+    /**
+     * 세트 토글 전용 — commit 완료를 대기하고 성공 여부를 반환한다(호출자가 성공 시에만 `saved`를 켠다).
+     * 컨테이너의 [AppContainer.saveNumberConfig]가 configMutex로 저장 순서를 직렬화하므로, 빠른 토글에도
+     * 디스크가 마지막 토글 상태로 확정된다. 미저장 상태에선 CTA 첫 구매 가드가 결제를 막아 화면≠디스크로 인한 오결제를 차단.
+     */
+    suspend fun saveConfigAwait(slots: List<Slot720>, fallback: FallbackPolicy, setMode: Boolean): Boolean =
+        container.saveNumberConfig(slots, fallback, setMode)
+
     // === 즉시 구매 (저장 버튼 아래 CTA — 645 docs/DESIGN-instant-purchase.md의 720 포트) ===
 
     val isLoggedIn = container.isLoggedIn

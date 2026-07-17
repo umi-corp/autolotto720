@@ -184,7 +184,8 @@ class PurchaseService720(
      */
     private fun parseSetTickets(r3: JSONObject, round: Int, reqNumber: String): List<Ticket720> {
         val raw = r3.optJSONObject("data")?.optString("prchsLtNoInfoLstCn").orEmpty()
-        val rows = raw.split(";", "\n").filter { it.isNotBlank() }
+        // 각 행 trim — CRLF(\r\n) 응답에서 split("\n")이 행 끝에 남기는 \r을 제거(마지막 필드 toIntOrNull 실패 → 정상 5행도 "결과 불명" 오판 방지).
+        val rows = raw.split(";", "\n").map { it.trim() }.filter { it.isNotBlank() }
         if (rows.size > 5) throw DhlotteryException("세트 응답 이상(${rows.size}행) — 결과 불명, 내역으로 대조하세요")
         val seenJo = mutableSetOf<Int>()
         val tickets = rows.map { row ->
