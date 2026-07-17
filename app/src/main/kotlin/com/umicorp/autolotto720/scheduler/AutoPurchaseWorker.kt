@@ -17,8 +17,10 @@ import com.umicorp.autolotto720.dhlottery.DhlotterySession
 import com.umicorp.autolotto720.dhlottery.Feature720
 import com.umicorp.autolotto720.dhlottery.PurchaseService720
 import com.umicorp.autolotto720.dhlottery.Round720
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.time.LocalDate
 import java.time.ZonedDateTime
@@ -175,17 +177,18 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                     return
                 }
 
+                step = "login"
+                auth.login(userId, password)
+
                 step = "pending_write"
-                // connPro 진입 전 선기록 — 결과 불명·프로세스 사망 시 이 회차 재결제 차단. 무결제 단계라
-                // 쓰기 실패는 재시도 가능해야 하므로 별도 step([purchase] 접두 아님 → 비-ambiguous, N12).
+                // connPro 진입 전 선기록 — 결과 불명·프로세스 사망 시 이 회차 재결제 차단. login(무결제) 뒤·purchase(connPro) 앞이라
+                // "connPro 진입 전 선기록" 불변식은 유지되고 즉시구매(login 뒤 선기록)와 대칭. login 일시 실패는 PENDING 없이 정상 재시도된다.
+                // 쓰기 실패는 무결제라 재시도 가능해야 하므로 별도 step([purchase] 접두 아님 → 비-ambiguous, N12).
                 if (!store.setPendingPurchase(
                         JSONObject().put("round", round).put("epochDay", today).put("amount", attempt).toString())
                 ) {
                     throw Exception("결제 준비에 실패했습니다.")   // 무결제 — 비-ambiguous라 재시도 가능
                 }
-
-                step = "login"
-                auth.login(userId, password)
 
                 step = "purchase"
                 val purchaseService = PurchaseService720(auth, session)
@@ -195,7 +198,7 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                     if (purchaseError is CancellationException) throw purchaseError   // 취소는 [purchase]로 오분류하지 않는다(R3).
                     when (classifyPurchaseFailure(purchaseError)) {
                         is PurchaseFailure.Rejected -> store.clearPendingPurchase()   // 무결제 확정 — PENDING 해제
-                        is PurchaseFailure.Unknown -> {                              // 결과 불명 — 가드 커밋 + 전액 원장 + PENDING 유지
+                        is PurchaseFailure.Unknown -> withContext(NonCancellable) {   // 결과 불명 — 가드 커밋 + 전액 원장 + PENDING 유지(즉시구매와 대칭, CE가 보상을 끊지 못하게)
                             store.setLastPurchase(round, userId)
                             recordSpendWorker(store, round, today, attempt)
                         }
@@ -203,21 +206,24 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                     throw Exception(purchaseError.message ?: "$purchaseError")   // [purchase] 래핑 → 비재시도
                 }
 
-                // 확정 성공/부분 — 원장에 지출 기록(부분은 시도 전액). PENDING 해제는 아래 commit 성공 후.
-                val ledgerOk = recordSpendWorker(store, r.round, today, if (r.partialFailure != null) attempt else r.amount)
+                // 성공 원장+commit 보상은 취소 불가 구간에서 — CE가 커밋을 끊지 못하게(즉시구매와 대칭, F3).
+                withContext(NonCancellable) {
+                    // 확정 성공/부분 — 원장에 지출 기록(부분은 시도 전액). PENDING 해제는 아래 commit 성공 후.
+                    val ledgerOk = recordSpendWorker(store, round, today, if (r.partialFailure != null) attempt else r.amount)
 
-                // 성공 즉시 회차+계정 기록(commit) — 이후 재실행은 round_guard가 차단.
-                // ponytail: 서버 처리~기록 사이 찰나에 킬되는 창은 남는다(중복결제 double-charge ceiling,
-                // "autolotto 정책 그대로" 결정으로 수용) — unique work 직렬화 + [purchase] 비재시도 + PENDING 선기록이 방어.
-                // 결제는 성공했으므로 기록 저장 실패는 [purchase]가 아닌 [commit]으로 분류 → "구매 실패" 오보 방지(R2 N6, 비재시도).
-                step = "commit"
-                // 커밋 반환 확인(G2) — false면 디스크 가드 미기록 → 재실행 시 round_guard가 못 막아 중복결제.
-                // 즉시구매와 동일 정책: [commit]로 분류(비재시도·성공 오보 금지) + 예약 자동구매 중단(재구매 차단). PENDING은 백업으로 유지.
-                if (!store.setLastPurchase(r.round, userId)) {   // (회차, 계정) 원자 커밋 — 부분 기록 방지(F3).
-                    store.setAutoEnabled(false)                  // doWork 알람 재등록 게이트도 내려 재실행 차단
-                    throw Exception("회차 기록 저장에 실패했습니다.")   // step=commit → [commit] 래핑 → 비재시도
+                    // 성공 즉시 회차+계정 기록(commit) — 이후 재실행은 round_guard가 차단.
+                    // ponytail: 서버 처리~기록 사이 찰나에 킬되는 창은 남는다(중복결제 double-charge ceiling,
+                    // "autolotto 정책 그대로" 결정으로 수용) — unique work 직렬화 + [purchase] 비재시도 + PENDING 선기록이 방어.
+                    // 결제는 성공했으므로 기록 저장 실패는 [purchase]가 아닌 [commit]으로 분류 → "구매 실패" 오보 방지(R2 N6, 비재시도).
+                    step = "commit"
+                    // 커밋 반환 확인(G2) — false면 디스크 가드 미기록 → 재실행 시 round_guard가 못 막아 중복결제.
+                    // 즉시구매와 동일 정책: [commit]로 분류(비재시도·성공 오보 금지) + 예약 자동구매 중단(재구매 차단). PENDING은 백업으로 유지.
+                    if (!store.setLastPurchase(round, userId)) {   // (회차, 계정) 원자 커밋 — 부분 기록 방지(F3).
+                        store.setAutoEnabled(false)                  // doWork 알람 재등록 게이트도 내려 재실행 차단
+                        throw Exception("회차 기록 저장에 실패했습니다.")   // step=commit → [commit] 래핑 → 비재시도
+                    }
+                    if (ledgerOk) store.clearPendingPurchase()   // 가드+원장 반영 완료 → PENDING 해제. 원장 실패 시 PENDING 유지
                 }
-                if (ledgerOk) store.clearPendingPurchase()   // 가드+원장 반영 완료 → PENDING 해제. 원장 실패 시 PENDING 유지
                 r
             }
 

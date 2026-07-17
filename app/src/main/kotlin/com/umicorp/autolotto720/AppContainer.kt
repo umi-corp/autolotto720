@@ -315,7 +315,7 @@ class AppContainer(context: Context) {
             }
 
             // ② 예산 가드 — 결제 진입 전, 미결 PENDING까지 더해 일/회차 한도를 검사(초과 시 미결제·미기록·미커밋).
-            val attempt = if (extra) autoGames * 1000 else attemptAmount(config!!)
+            val attempt = if (extra) autoGames * 1000 else attemptAmount(requireNotNull(config) { "구매할 게임 설정이 없습니다." })
             val today = java.time.LocalDate.now(Round720.KST).toEpochDay()
             val ledger = BudgetGuard.parseLedger(store.getSpendLedger())
             if (!BudgetGuard.check(ledger, today, round, attempt, store.getDailyBudget(), store.getWeeklyBudget(), pending)) {
