@@ -90,8 +90,9 @@ class PurchaseService720(
         try {
             val round = Round720.getUpcomingDrawRound(ZonedDateTime.now(clock))
             // GIVE_UP 폴백으로 스킵된 게임은 null → 제외. connPro 성공이 다음 게임의 "구매 진행중" 락을 해제.
+            // 전부 스킵돼 빈 결과가 나올 수 있음(지정번호 점유 + 구매 포기) — 이는 오류가 아니라 정책상 정상 결과.
+            // (게임 도중 connPro 오류는 purchaseOneGame이 예외로 던져 여기 도달하지 않는다.)
             val tickets = specs.mapNotNull { purchaseOneGame(round, it, userId, fallback) }
-            if (tickets.isEmpty()) throw DhlotteryException("구매된 게임이 없습니다 (지정번호 점유 후 '구매 포기' 정책)")
             return PurchaseResult720(round, tickets, tickets.size * UNIT_PRICE)
         } finally {
             session.cookies.unfreeze("JSESSIONID")

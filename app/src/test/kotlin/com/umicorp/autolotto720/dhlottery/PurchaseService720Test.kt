@@ -189,12 +189,12 @@ class PurchaseService720Test {
     }
 
     @Test
-    fun `config manual taken with GIVE_UP skips and throws none purchased`() = runBlocking {
+    fun `config manual taken with GIVE_UP skips returns empty result (not error)`() = runBlocking {
         server.dispatcher = manualDispatcher(available = false, number = "111111", jo = 3)
-        val ex = runCatching {
-            service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1)), fallback = FallbackPolicy.GIVE_UP))
-        }.exceptionOrNull()
-        assertTrue(ex is DhlotteryException && ex.message!!.contains("구매된 게임이 없습니다"))
+        // 점유 + 구매 포기 = 정책상 정상 결과(오류 아님) → 빈 티켓/0원.
+        val r = service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1)), fallback = FallbackPolicy.GIVE_UP))
+        assertTrue(r.tickets.isEmpty())
+        assertEquals(0, r.amount)
     }
 
     @Test

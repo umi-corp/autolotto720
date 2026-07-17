@@ -188,7 +188,7 @@ class AppContainer(context: Context) {
             val config = _numberConfig.value
             val result = if (config.gameCount > 0) svc.purchase(config) else svc.purchase(games = 1)
             refreshBalance()
-            if (result.tickets.isEmpty()) "구매 응답에 티켓 정보 없음 (내역 확인 필요)"
+            if (result.tickets.isEmpty()) "구매한 게임 없음 (지정번호 점유 + 구매 포기 정책)"
             else "구매 성공: " + result.tickets.joinToString(", ") { "${it.jo}조 ${it.number}" } +
                 " (${result.round}회, ₩${result.amount})"
         } catch (e: Exception) {

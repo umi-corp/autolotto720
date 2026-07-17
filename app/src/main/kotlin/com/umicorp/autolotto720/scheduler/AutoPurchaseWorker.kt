@@ -138,15 +138,25 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 }.onFailure { if (it is CancellationException) throw it }
 
                 step = "notify"
-                val ticketLines = result.tickets.joinToString("\n") { "${it.jo}조 ${it.number}" }
-
-                Notifications.show(
-                    ctx,
-                    "🎰 AutoLotto720 자동 구매 완료!",
-                    "제 ${result.round}회 · ${result.tickets.size}게임\n$ticketLines",
-                    1,
-                    tab = Notifications.TAB_HISTORY,
-                )
+                if (result.tickets.isEmpty()) {
+                    // 지정번호 점유 + '구매 포기' 정책 → 산 게임 없음. 오류가 아니라 정책상 정상 결과이므로 안내만.
+                    Notifications.show(
+                        ctx,
+                        "ℹ️ AutoLotto720 이번 회차 미구매",
+                        "제 ${result.round}회 · 지정한 번호가 이미 판매되어 '구매 포기' 정책에 따라 구매하지 않았습니다.",
+                        1,
+                        tab = Notifications.TAB_HISTORY,
+                    )
+                } else {
+                    val ticketLines = result.tickets.joinToString("\n") { "${it.jo}조 ${it.number}" }
+                    Notifications.show(
+                        ctx,
+                        "🎰 AutoLotto720 자동 구매 완료!",
+                        "제 ${result.round}회 · ${result.tickets.size}게임\n$ticketLines",
+                        1,
+                        tab = Notifications.TAB_HISTORY,
+                    )
+                }
             } catch (purchaseError: Exception) {
                 if (purchaseError is CancellationException) throw purchaseError   // 취소는 [purchase]로 오분류하지 않는다(R3).
                 throw Exception(purchaseError.message ?: "$purchaseError")
