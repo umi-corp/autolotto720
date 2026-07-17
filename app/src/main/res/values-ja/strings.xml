@@ -190,6 +190,8 @@
     <string name="thresholdInputHint">金額 (ウォン)</string>
     <string name="setModeLabel">全組セット</string>
     <string name="slotModeLabel">スロット別</string>
+    <string name="modeSwitchToSet">全組セットに切り替えました — スロットゲームは初期化されます。保存を押して適用してください。</string>
+    <string name="modeSwitchToSlot">スロット別に切り替えました — 全組セットが解除されます。スロットを設定して保存してください。</string>
     <string name="setModeInfo">5組すべて同じ番号1枚ずつ · ₩5,000 · 自動割当</string>
     <string name="setModeConfirm">第%1$d回 · 全組セット · 5枚 · ₩5,000 · 自動</string>
     <string name="sectionBudget">💰 予算上限</string>
@@ -230,7 +232,7 @@
     <string name="extraPickSetTitle">追加購入 (全組セット)</string>
     <string name="extraPickBody">自動(組·番号とも自動)のゲーム数を選択してください。週間上限(5ゲーム)を超えるとサーバーで拒否されます。</string>
     <string name="instantInProgress">購入中…</string>
-    <string name="instantSuccessTitle">🎰 購入完了!</string>
+    <string name="instantSuccessTitle">⚡ 購入完了!</string>
     <string name="instantSuccessBody">第%1$d回 · %2$dゲーム</string>
     <string name="instantNoTickets">指定した番号がすでに販売済みのため、\'購入見送り\'ポリシーにより購入しませんでした。</string>
     <string name="instantErrorTitle">購入失敗</string>

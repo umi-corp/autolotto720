@@ -197,6 +197,8 @@
     <string name="thresholdInputHint">금액 (원)</string>
     <string name="setModeLabel">모든조 세트</string>
     <string name="slotModeLabel">슬롯별</string>
+    <string name="modeSwitchToSet">모든조 세트로 전환했어요 — 슬롯 게임은 초기화됩니다. 저장을 눌러 적용하세요.</string>
+    <string name="modeSwitchToSlot">슬롯별로 전환했어요 — 모든조 세트가 해제됩니다. 슬롯을 설정하고 저장하세요.</string>
     <string name="setModeInfo">5개 조 전부 같은 번호 1매씩 · 5,000원 · 번호 자동배정</string>
     <string name="setModeConfirm">제 %1$d회 · 모든조 세트 · 5매 · ₩5,000 · 자동배정</string>
     <string name="sectionBudget">💰 예산 한도</string>
@@ -238,7 +240,7 @@
     <string name="extraPickSetTitle">추가 구매 (모든조 세트)</string>
     <string name="extraPickBody">자동(조·번호 모두 자동) 게임 수를 선택하세요. 주간 한도(5게임) 초과는 서버에서 거절됩니다.</string>
     <string name="instantInProgress">구매 중…</string>
-    <string name="instantSuccessTitle">🎰 구매 완료!</string>
+    <string name="instantSuccessTitle">⚡ 구매 완료!</string>
     <string name="instantSuccessBody">제 %1$d회 · %2$d게임</string>
     <string name="instantNoTickets">지정한 번호가 이미 판매되어 \'구매 포기\' 정책에 따라 구매하지 않았습니다.</string>
     <string name="instantErrorTitle">구매 실패</string>

@@ -190,6 +190,8 @@
     <string name="thresholdInputHint">Amount (KRW)</string>
     <string name="setModeLabel">All-groups set</string>
     <string name="slotModeLabel">Per slot</string>
+    <string name="modeSwitchToSet">Switched to All-groups set — slot games are cleared. Tap Save to apply.</string>
+    <string name="modeSwitchToSlot">Switched to Per slot — All-groups set is turned off. Set up slots and save.</string>
     <string name="setModeInfo">Same number in all 5 groups · ₩5,000 · auto-assigned</string>
     <string name="setModeConfirm">Round %1$d · All-groups set · 5 tickets · ₩5,000 · auto</string>
     <string name="sectionBudget">💰 Budget Limit</string>
@@ -230,7 +232,7 @@
     <string name="extraPickSetTitle">Buy More (All-groups set)</string>
     <string name="extraPickBody">Choose how many auto games (group and number both auto) to buy. Requests over the weekly limit (5 games) are rejected by the server.</string>
     <string name="instantInProgress">Purchasing…</string>
-    <string name="instantSuccessTitle">🎰 Purchase Complete!</string>
+    <string name="instantSuccessTitle">⚡ Purchase Complete!</string>
     <string name="instantSuccessBody">Round %1$d · %2$d game(s)</string>
     <string name="instantNoTickets">Your chosen numbers were already sold, so nothing was bought under the \'give up\' policy.</string>
     <string name="instantErrorTitle">Purchase Failed</string>

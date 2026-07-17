@@ -346,17 +346,19 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.height(16.dp))
 
-                // 모드 세그먼트 — [슬롯별] / [모든조 세트]. 세트 토글은 즉시 저장(revision 증가) —
-                // 세트는 조 편집이 없어 토글 자체가 확정이다. saved 색은 committed+세트가 영속됨을 반영.
-                // saved는 commit 성공 후에만 켠다(낙관 반영 금지) — 저장 완료 전엔 saved=false라 첫 구매 CTA가 결제를 막는다.
+                // 모드 세그먼트 — [슬롯별] / [모든조 세트]. 토글은 자동저장하지 않는다 — 모드를 바꾸면 다른 모드
+                // 설정을 초기화하고(스낵바로 알림) saved=false로 저장 버튼을 되돌려 명시적 저장을 요구한다.
+                // 미저장(saved=false)이면 첫 구매 CTA가 결제를 막고, 워커는 디스크(저장본)만 읽어 화면≠디스크가 안전하다.
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = !setMode,
                         enabled = !locked,
                         onClick = {
                             if (setMode) {
-                                setMode = false; saved = false
-                                scope.launch { saved = vm.saveConfigAwait(committed.toList(), fallback, false) }
+                                // 모든조 세트 해제 → 슬롯별. 세트엔 편집 상태가 없어 해제만 알리고 저장 버튼 초기화.
+                                setMode = false
+                                saved = false
+                                scope.launch { snackbar.showSnackbar(context.getString(R.string.modeSwitchToSlot)) }
                             }
                         },
                         label = { Text(stringResource(R.string.slotModeLabel), fontWeight = FontWeight.Bold) },
@@ -367,8 +369,12 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                         enabled = !locked,
                         onClick = {
                             if (!setMode) {
-                                setMode = true; saved = false
-                                scope.launch { saved = vm.saveConfigAwait(committed.toList(), fallback, true) }
+                                // 슬롯별 → 모든조 세트. 세트는 슬롯을 쓰지 않으므로 슬롯 게임을 초기화하고 알림 + 저장 버튼 초기화.
+                                setMode = true
+                                for (i in 0..4) committed[i] = Slot720.Unset
+                                syncDraftToSlot(currentSlot)
+                                saved = false
+                                scope.launch { snackbar.showSnackbar(context.getString(R.string.modeSwitchToSet)) }
                             }
                         },
                         label = { Text(stringResource(R.string.setModeLabel), fontWeight = FontWeight.Bold) },

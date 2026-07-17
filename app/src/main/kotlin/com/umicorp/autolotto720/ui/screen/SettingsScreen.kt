@@ -328,8 +328,9 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
                             }
                         },
                     )
-                    // 설정 불가 안내: 목 17:00~금 00:00은 저장이 하드 블록됨(isValidPurchaseTime). 레거시 저장값 안내용.
-                    if (day == THURSDAY && hour >= SALES_CLOSE_HOUR) {
+                    // 설정 불가 안내: 판매 정지 창(목 17:00~22:00)은 저장이 하드 블록됨. 저장 게이트와 같은
+                    // 판정([SettingsViewModel.isValidPurchaseTime]=Round720.isScheduleBlocked)에 위임해 드리프트 방지. 레거시 저장값 안내용.
+                    if (!SettingsViewModel.isValidPurchaseTime(day, hour, minute)) {
                         HorizontalDivider()
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
@@ -889,10 +890,6 @@ private fun requestIgnoreBatteryOptimizations(context: Context) {
         Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")),
     )
 }
-
-/** 720 판매 마감 안내 상수(Task14) — day: 1=월 .. 7=일, 목=4. 실제 하드 가드는 AutoPurchaseWorker(Task9). */
-private const val THURSDAY = 4
-private const val SALES_CLOSE_HOUR = 17
 
 private const val URL_CHARGE = "https://www.dhlottery.co.kr/mypage/mndpChrg"
 private const val URL_OPENSOURCE = "https://github.com/umi-corp/autolotto720"
