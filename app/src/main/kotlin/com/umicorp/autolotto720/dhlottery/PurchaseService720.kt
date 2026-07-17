@@ -183,9 +183,9 @@ class PurchaseService720(
      * 가드가 Unknown에도 커밋돼 이중결제를 막는다). "정상 행 N개(1≤N<5)"는 부분 성공, "형식 이상"은 불명 throw로 구분.
      */
     private fun parseSetTickets(r3: JSONObject, round: Int, reqNumber: String): List<Ticket720> {
-        val raw = r3.optJSONObject("data")?.optString("prchsLtNoInfoLstCn").orEmpty()
-        // 각 행 trim — CRLF(\r\n) 응답에서 split("\n")이 행 끝에 남기는 \r을 제거(마지막 필드 toIntOrNull 실패 → 정상 5행도 "결과 불명" 오판 방지).
-        val rows = raw.split(";", "\n").map { it.trim() }.filter { it.isNotBlank() }
+        val raw = extractPrchsInfo(r3)
+        // 실측(325회 세트 구매): 행 구분자는 **콤마**, 필드 구분자는 `|`. 방어적으로 `;`·개행도 함께 분리하고 각 행 trim.
+        val rows = raw.split(",", ";", "\n").map { it.trim() }.filter { it.isNotBlank() }
         if (rows.size > 5) throw DhlotteryException("세트 응답 이상(${rows.size}행) — 결과 불명, 내역으로 대조하세요")
         val seenJo = mutableSetOf<Int>()
         val tickets = rows.map { row ->
@@ -199,6 +199,18 @@ class PurchaseService720(
         }
         if (tickets.isEmpty()) throw DhlotteryException("세트 구매 결과 불명 — 내역으로 대조하세요")
         return tickets
+    }
+
+    /**
+     * connPro 응답에서 prchsLtNoInfoLstCn 원문 추출.
+     * 실측(325회 세트): connPro는 실제 payload를 top-level이 아니라 **`resultMsg`에 JSON 문자열로 중첩**해 반환한다
+     * (`{"resultCode":"100","resultMsg":"{...\"data\":{\"prchsLtNoInfoLstCn\":...}}"}`). top-level `data`도 방어적으로
+     * 먼저 확인해 서버가 형식을 바꿔도(또는 낱장 경로처럼 top-level인 응답도) 견디게 한다.
+     */
+    private fun extractPrchsInfo(r3: JSONObject): String {
+        r3.optJSONObject("data")?.optString("prchsLtNoInfoLstCn")?.takeIf { it.isNotBlank() }?.let { return it }
+        val inner = runCatching { JSONObject(r3.optString("resultMsg")) }.getOrNull()
+        return inner?.optJSONObject("data")?.optString("prchsLtNoInfoLstCn").orEmpty()
     }
 
     /** 모든 비-SUCCESS 코드에 "결과 불명" 마커를 심는다(서버 msg 유무와 무관) → classifyPurchaseFailure=Unknown. */

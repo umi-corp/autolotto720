@@ -11,6 +11,7 @@ import okhttp3.mockwebserver.RecordedRequest
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -38,8 +39,15 @@ class PurchaseService720SetTest {
     private fun setConfig() = NumberConfig720.empty().copy(setMode = true)
     private fun theRound() = Round720.getUpcomingDrawRound(java.time.ZonedDateTime.now(clock))
 
-    // 세트 성공: 5개 조 행 (번호|주문|일련|회차|조) 파이프+세미콜론 다중행. 실측 확정 전 잠정 형식.
-    private fun setInfo(number: String) = (1..5).joinToString(";") { "$number|2026|100$it|325|$it" }
+    // 세트 성공 행: (번호|주문|일련|회차|조). 실측(325회) 확정 — 행 구분자 **콤마**, 필드 `|`.
+    private fun setInfo(number: String) = (1..5).joinToString(",") { "$number|202607180312725|100$it|325|$it" }
+
+    /** 실측 connPro 응답 형식 — payload를 resultMsg에 JSON 문자열로 중첩(top-level data 아님). */
+    private fun setResponse(info: String, code: String = "100"): String {
+        val inner = JSONObject().put("resultCode", code).put("resultMessage", JSONObject.NULL)
+            .put("data", JSONObject().put("ltPrchsQty", 5).put("prchsLtNoInfoLstCn", info))
+        return JSONObject().put("resultCode", code).put("resultMsg", inner.toString()).toString()
+    }
 
     /** MockWebServer가 받은 q=(wireQ 이중 인코딩) 평문을 복호화 — connPro/makeAutoNo 평문 단언용.
      *  wireQ가 '+'→%252B, '/'→%2F, '='→%3D로 바꾸므로 base64 decode 전에 역변환해야 복호에 성공한다. */
@@ -68,7 +76,7 @@ class PurchaseService720SetTest {
                 req.path == "/connPro.do" -> {
                     connProCount++
                     connPlain = plain(req)
-                    enc("""{"resultCode":"100","data":{"prchsLtNoInfoLstCn":"${setInfo("574067")}"}}""")
+                    enc(setResponse(setInfo("574067")))
                 }
                 else -> MockResponse().setResponseCode(404)
             }
@@ -143,7 +151,7 @@ class PurchaseService720SetTest {
 
     @Test fun `set six rows throws unknown (not silently dropped)`() = runBlocking {
         // 6행+는 응답 신뢰 불가 → 조용히 버리지 않고 결과 불명 throw.
-        server.dispatcher = setRawInfoDispatcher((1..6).joinToString(";") { "574067|2026|100$it|325|$it" })
+        server.dispatcher = setRawInfoDispatcher((1..6).joinToString(",") { "574067|202607180312725|100$it|325|$it" })
         val ex = runCatching { service().purchase(setConfig(), theRound()) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException)
         assertTrue(com.umicorp.autolotto720.isUnknownResultMessage(ex?.message))
@@ -151,7 +159,7 @@ class PurchaseService720SetTest {
 
     @Test fun `set duplicate jo row throws unknown (not partial)`() = runBlocking {
         // 조 [1,2,3,4,4] — 중복 조는 형식 이상 → 부분 성공 아니라 결과 불명 throw.
-        val info = listOf(1, 2, 3, 4, 4).joinToString(";") { "574067|2026|100$it|325|$it" }
+        val info = listOf(1, 2, 3, 4, 4).joinToString(",") { "574067|202607180312725|100$it|325|$it" }
         server.dispatcher = setRawInfoDispatcher(info)
         val ex = runCatching { service().purchase(setConfig(), theRound()) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException)
@@ -160,14 +168,40 @@ class PurchaseService720SetTest {
 
     @Test fun `set mismatched request number row throws unknown`() = runBlocking {
         // 배정 번호는 574067인데 한 행이 다른 번호(999999) → 요청번호 불일치 → 결과 불명 throw.
-        val info = (1..5).joinToString(";") { i ->
+        val info = (1..5).joinToString(",") { i ->
             val no = if (i == 3) "999999" else "574067"
-            "$no|2026|100$i|325|$i"
+            "$no|202607180312725|100$i|325|$i"
         }
         server.dispatcher = setRawInfoDispatcher(info)
         val ex = runCatching { service().purchase(setConfig(), theRound()) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException)
         assertTrue(com.umicorp.autolotto720.isUnknownResultMessage(ex?.message))
+    }
+
+    @Test fun `set parses the exact live-captured 325 response (E2E fixture)`() = runBlocking {
+        // 2026-07-18 실기기 세트 구매(325회)에서 캡처한 connPro 응답 원문 그대로 — 파서가 5매로 정확히 파싱해야 한다.
+        // 회귀 고정: payload가 resultMsg에 중첩되고 행이 콤마 구분이라는 실측 형식을 코드가 계속 지원하는지 검증.
+        val liveInfo = (1..5).joinToString(",") { "991711|202607180312725|10000092112204${it + 2}|325|$it" }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(req: RecordedRequest): MockResponse = when {
+                req.path?.startsWith("/game/TotalGame.jsp") == true -> MockResponse().setBody("ok")
+                req.path == "/game/pension720/game.jsp" ->
+                    MockResponse().setBody("""<input name="USER_ID" value="t"/>""")
+                        .addHeader("Set-Cookie", "JSESSIONID=$jses; Path=/")
+                req.path == "/makeAutoNo.do" ->
+                    enc("""{"resultCode":"100","selClsNo":"1,2,3,4,5","selLotNo":"991711","round":"325"}""")
+                req.path == "/makeOrderNo.do" ->
+                    enc("""{"resultCode":"100","orderNo":"1","orderDate":"2026-07-18 00:14:31"}""")
+                req.path == "/connPro.do" -> enc(setResponse(liveInfo))   // resultMsg 중첩 + 콤마 구분
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val result = service().purchase(setConfig(), theRound())
+        assertEquals(5, result.tickets.size)
+        assertEquals(5000, result.amount)
+        assertEquals(listOf(1, 2, 3, 4, 5), result.tickets.map { it.jo })
+        assertTrue(result.tickets.all { it.number == "991711" })
+        assertNull(result.partialFailure)
     }
 
     // connPro가 code=100 + 임의의 prchsLtNoInfoLstCn 원문을 반환하는 세트 디스패처(이상 행 주입용).
@@ -182,7 +216,7 @@ class PurchaseService720SetTest {
             req.path == "/makeOrderNo.do" ->
                 enc("""{"resultCode":"100","orderNo":"1","orderDate":"2026-07-16 23:03:23"}""")
             req.path == "/connPro.do" ->
-                enc("""{"resultCode":"100","data":{"prchsLtNoInfoLstCn":"$info"}}""")
+                enc(setResponse(info))
             else -> MockResponse().setResponseCode(404)
         }
     }
@@ -199,8 +233,8 @@ class PurchaseService720SetTest {
             req.path == "/makeOrderNo.do" ->
                 enc("""{"resultCode":"100","orderNo":"1","orderDate":"2026-07-16 23:03:23"}""")
             req.path == "/connPro.do" -> {
-                val info = (1..rows).joinToString(";") { "574067|2026|100$it|325|$it" }
-                enc("""{"resultCode":"$code","data":{"prchsLtNoInfoLstCn":"$info"}}""")
+                val info = (1..rows).joinToString(",") { "574067|202607180312725|100$it|325|$it" }
+                enc(setResponse(info, code))
             }
             else -> MockResponse().setResponseCode(404)
         }
