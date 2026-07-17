@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AutoLotto720 - 연금복권 자동 구매 앱</title>
-  <meta name="description" content="매주 자동으로 연금복권720+를 구매하는 Android 앱. 자동 배정 구매, 당첨 확인, 알림까지.">
+  <meta name="description" content="매주 자동으로 연금복권720+를 구매하는 Android 앱. 자동·반자동·수동 구매, 당첨 확인, 알림까지.">
   <meta property="og:title" content="AutoLotto720 - 연금복권 자동 구매 앱">
-  <meta property="og:description" content="매주 자동으로 연금복권720+를 구매하는 Android 앱. 자동 배정 구매, 당첨 확인, 알림까지.">
+  <meta property="og:description" content="매주 자동으로 연금복권720+를 구매하는 Android 앱. 자동·반자동·수동 구매, 당첨 확인, 알림까지.">
   <meta property="og:image" content="https://autolotto720.umicorp.kr/icon.png">
   <link rel="icon" type="image/png" href="icon.png">
   <style>
@@ -398,13 +398,13 @@
     <div class="feature-grid">
       <div class="feature-card reveal">
         <div class="feature-icon" aria-hidden="true">🎫</div>
-        <h3 data-i18n="f1_title">자동 배정</h3>
-        <p data-i18n="f1_desc">번호 고민 없이 매주 자동 배정으로 구매. 기본 1매, 최대 5매까지.</p>
+        <h3 data-i18n="f1_title">자동·수동 선택</h3>
+        <p data-i18n="f1_desc">완전 자동·반자동·수동(조·번호 직접 지정) 중 골라 매주 자동 구매. 최대 5매.</p>
       </div>
       <div class="feature-card reveal">
         <div class="feature-icon" aria-hidden="true">⏰</div>
         <h3 data-i18n="f2_title">자동 구매</h3>
-        <p data-i18n="f2_desc">매주 목요일 추첨 전, 설정한 요일·시간에 자동 구매. 앱을 켜지 않아도 동작.</p>
+        <p data-i18n="f2_desc">설정한 요일·시간에 매주 자동 구매(기본: 금요일 오전 9시). 앱을 켜지 않아도 동작.</p>
       </div>
       <div class="feature-card reveal">
         <div class="feature-icon" aria-hidden="true">🔔</div>
@@ -419,7 +419,7 @@
       <div class="feature-card reveal">
         <div class="feature-icon" aria-hidden="true">🔒</div>
         <h3 data-i18n="f5_title">보안</h3>
-        <p data-i18n="f5_desc">계정 정보는 Android Keystore로 암호화 저장. 서버 전송 없음.</p>
+        <p data-i18n="f5_desc">계정 정보는 Keystore로 암호화되어 기기에만 저장. 자체·제3자 서버 없음(로그인 시 동행복권에만 직접 전송).</p>
       </div>
       <div class="feature-card reveal">
         <div class="feature-icon" aria-hidden="true">💸</div>
@@ -442,7 +442,7 @@
       </div>
       <div class="step reveal">
         <div class="step-num">3</div>
-        <div><h3 data-i18n="s3_title">구매 설정</h3><p data-i18n="s3_desc">구매 탭에서 매수(1~5매)와 구매 요일·시간을 설정합니다.</p></div>
+        <div><h3 data-i18n="s3_title">구매 설정</h3><p data-i18n="s3_desc">번호 탭에서 게임별 자동·반자동·수동을 설정하고, 설정 탭에서 구매 요일·시간을 지정합니다.</p></div>
       </div>
       <div class="step reveal">
         <div class="step-num">4</div>
@@ -466,16 +466,16 @@
         tagline: '매주 자동으로 연금복권을 구매하는 가장 간편한 방법.\n설정 한 번이면 끝.',
         download: 'APK 다운로드',
         features_title: '✨ 주요 기능',
-        f1_title: '자동 배정', f1_desc: '번호 고민 없이 매주 자동 배정으로 구매. 기본 1매, 최대 5매까지.',
-        f2_title: '자동 구매', f2_desc: '매주 목요일 추첨 전, 설정한 요일·시간에 자동 구매. 앱을 켜지 않아도 동작.',
+        f1_title: '자동·수동 선택', f1_desc: '완전 자동·반자동·수동(조·번호 직접 지정) 중 골라 매주 자동 구매. 최대 5매.',
+        f2_title: '자동 구매', f2_desc: '설정한 요일·시간에 매주 자동 구매(기본: 금요일 오전 9시). 앱을 켜지 않아도 동작.',
         f3_title: '알림', f3_desc: '구매 완료, 당첨 결과를 푸시 알림으로 받아보세요. 서버 없이 로컬에서 동작.',
         f4_title: '구매 내역', f4_desc: '동행복권에서 최근 구매 내역을 자동 조회. 조·번호와 당첨 여부를 한눈에.',
-        f5_title: '보안', f5_desc: '계정 정보는 Android Keystore로 암호화 저장. 서버 전송 없음.',
+        f5_title: '보안', f5_desc: '계정 정보는 Keystore로 암호화되어 기기에만 저장. 자체·제3자 서버 없음(로그인 시 동행복권에만 직접 전송).',
         f6_title: '완전 무료', f6_desc: '광고 없음. 구독 없음. 서버 비용 없음. 오픈소스.',
         how_title: '📱 사용 방법',
         s1_title: 'APK 설치', s1_desc: '위 버튼으로 APK를 다운로드하고 설치하세요.',
         s2_title: '동행복권 로그인', s2_desc: '설정 탭에서 동행복권 계정으로 로그인합니다.',
-        s3_title: '구매 설정', s3_desc: '구매 탭에서 매수(1~5매)와 구매 요일·시간을 설정합니다.',
+        s3_title: '구매 설정', s3_desc: '번호 탭에서 게임별 자동·반자동·수동을 설정하고, 설정 탭에서 구매 요일·시간을 지정합니다.',
         s4_title: '자동 구매 ON', s4_desc: '자동 구매를 켜면 끝! 매주 알아서 구매하고 당첨까지 확인합니다.',
         notice: '⚠️ 이 앱은 동행복권(dhlottery.co.kr) 계정이 필요합니다.\n예치금이 충분해야 자동 구매가 진행됩니다.',
         family: '패밀리 앱:',
@@ -485,35 +485,35 @@
         tagline: 'The easiest way to buy Korean Pension Lottery automatically every week.\nSet it once, forget it.',
         download: 'Download APK',
         features_title: '✨ Features',
-        f1_title: 'Quick Pick', f1_desc: 'No number picking — tickets are auto-assigned every week. 1 ticket by default, up to 5.',
-        f2_title: 'Auto Purchase', f2_desc: 'Buys on your schedule before every Thursday draw. Works even when the app is closed.',
+        f1_title: 'Auto or Manual', f1_desc: 'Full-auto, semi-auto, or manual (pick your own group and numbers) — bought for you every week. Up to 5 tickets.',
+        f2_title: 'Auto Purchase', f2_desc: 'Auto-buys weekly at your chosen day and time (default: Friday 9 AM). Works even when the app is closed.',
         f3_title: 'Notifications', f3_desc: 'Get push notifications for purchase confirmations and winning results. No server needed.',
         f4_title: 'Purchase History', f4_desc: 'Auto-fetch recent purchases from DHLottery. Group, number and results at a glance.',
-        f5_title: 'Security', f5_desc: 'Credentials encrypted via Android Keystore. No data sent to external servers.',
+        f5_title: 'Security', f5_desc: 'Credentials are encrypted via Android Keystore and stored only on your device. No backend or third-party servers — sent only to DHLottery to log in.',
         f6_title: 'Completely Free', f6_desc: 'No ads. No subscription. No server costs. Open source.',
         how_title: '📱 How to Use',
         s1_title: 'Install APK', s1_desc: 'Download and install the APK using the button above.',
         s2_title: 'Login', s2_desc: 'Log in with your DHLottery account in the Settings tab.',
-        s3_title: 'Set Purchase', s3_desc: 'Choose ticket count (1–5) and purchase day/time in the Buy tab.',
+        s3_title: 'Set Purchase', s3_desc: 'Set each game to full-auto, semi-auto, or manual in the Numbers tab, then pick the purchase day and time in Settings.',
         s4_title: 'Turn On Auto', s4_desc: 'Enable auto-purchase. That\'s it! It buys and checks results every week.',
         notice: '⚠️ This app requires a DHLottery (dhlottery.co.kr) account.\nSufficient deposit balance is needed for auto-purchase.',
         family: 'Family app:',
         disclaimer: 'This app is not an official DHLottery product.',
       },
       ja: {
-        tagline: '毎週自動で年金宝くじを購入する最も簡単な方法。\n一度設定すれば、あとはお任せ。',
+        tagline: '毎週自動で年金くじを購入する最も簡単な方法。\n一度設定すれば、あとはお任せ。',
         download: 'APKダウンロード',
         features_title: '✨ 主な機能',
-        f1_title: '自動割当', f1_desc: '番号選び不要。毎週自動割当で購入。基本1枚、最大5枚まで。',
-        f2_title: '自動購入', f2_desc: '毎週木曜の抽選前、設定した曜日・時間に自動購入。アプリを開かなくても動作します。',
+        f1_title: '自動・手動選択', f1_desc: '完全自動・半自動・手動（組と番号を直接指定）から選んで毎週自動購入。最大5枚。',
+        f2_title: '自動購入', f2_desc: '設定した曜日・時間に毎週自動購入（初期設定：金曜午前9時）。アプリを開かなくても動作します。',
         f3_title: '通知', f3_desc: '購入完了、当選結果をプッシュ通知でお届け。サーバー不要でローカル動作。',
         f4_title: '購入履歴', f4_desc: '同行福券から最近の購入履歴を自動取得。組・番号と当選結果を一目で確認。',
-        f5_title: 'セキュリティ', f5_desc: 'アカウント情報はAndroid Keystoreで暗号化保存。外部サーバーへの送信なし。',
+        f5_title: 'セキュリティ', f5_desc: 'アカウント情報はAndroid Keystoreで暗号化して端末内にのみ保存。自社・第三者サーバーへの送信なし（ログイン時に同行福券へのみ直接送信）。',
         f6_title: '完全無料', f6_desc: '広告なし。サブスクなし。サーバー費用なし。オープンソース。',
         how_title: '📱 使い方',
         s1_title: 'APKインストール', s1_desc: '上のボタンからAPKをダウンロードしてインストール。',
         s2_title: 'ログイン', s2_desc: '設定タブで同行福券アカウントにログインします。',
-        s3_title: '購入設定', s3_desc: '購入タブで枚数（1～5枚）と曜日・時間を設定します。',
+        s3_title: '購入設定', s3_desc: '番号タブで各ゲームを完全自動・半自動・手動に設定し、設定タブで購入曜日・時間を指定します。',
         s4_title: '自動購入ON', s4_desc: '自動購入をオンにすれば完了！毎週自動で購入し、当選まで確認します。',
         notice: '⚠️ このアプリは同行福券（dhlottery.co.kr）のアカウントが必要です。\n自動購入には十分なデポジット残高が必要です。',
         family: 'ファミリーアプリ:',
