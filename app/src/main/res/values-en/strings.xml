@@ -32,7 +32,7 @@
     <string name="rank7th">7th</string>
     <string name="rankBonus">Bonus</string>
     <string name="rankNoWin720">Not Won</string>
-    <string name="rankPendingDraw">Awaiting Draw</string>
+    <string name="rankPendingDraw">Pending</string>
     <string name="prizeAnnuity1st">₩7,000,000/month × 20 years</string>
     <string name="prizeAnnuity2nd">₩1,000,000/month × 10 years</string>
 
@@ -70,7 +70,7 @@
     <string name="gameSummaryFullAuto">🎲 Auto (Weekly Random)</string>
     <string name="gameSummarySemiAuto">Group %1$d · auto number</string>
     <string name="gameSummaryManual">Group %1$d  %2$s</string>
-    <string name="fallbackPolicyLabel">If the number is taken</string>
+    <string name="fallbackPolicyLabel">If your number is sold</string>
     <string name="fallbackReassignAll">Auto-assign group and number</string>
     <string name="fallbackKeepGroup">Keep group · auto-assign number</string>
     <string name="fallbackGiveUp">Give up</string>

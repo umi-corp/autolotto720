@@ -32,7 +32,7 @@
     <string name="rank7th">7等</string>
     <string name="rankBonus">ボーナス</string>
     <string name="rankNoWin720">非当選</string>
-    <string name="rankPendingDraw">抽選待ち</string>
+    <string name="rankPendingDraw">確認待ち</string>
     <string name="prizeAnnuity1st">月700万ウォン×20年</string>
     <string name="prizeAnnuity2nd">月100万ウォン×10年</string>
 
@@ -70,7 +70,7 @@
     <string name="gameSummaryFullAuto">🎲 自動 (毎週ランダム)</string>
     <string name="gameSummarySemiAuto">第%1$d組・番号自動</string>
     <string name="gameSummaryManual">第%1$d組  %2$s</string>
-    <string name="fallbackPolicyLabel">番号が売り切れの場合</string>
+    <string name="fallbackPolicyLabel">指定番号が販売済みの場合</string>
     <string name="fallbackReassignAll">組+番号を自動割当</string>
     <string name="fallbackKeepGroup">組を維持・番号を自動割当</string>
     <string name="fallbackGiveUp">購入をあきらめる</string>

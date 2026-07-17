@@ -36,7 +36,7 @@
     <string name="rank7th">7등</string>
     <string name="rankBonus">보너스</string>
     <string name="rankNoWin720">미당첨</string>
-    <string name="rankPendingDraw">추첨 대기</string>
+    <string name="rankPendingDraw">확인 대기</string>
     <string name="prizeAnnuity1st">월 700만원×20년</string>
     <string name="prizeAnnuity2nd">월 100만원×10년</string>
 
@@ -75,7 +75,7 @@
     <string name="gameSummaryFullAuto">🎲 자동 (매주 랜덤)</string>
     <string name="gameSummarySemiAuto">%1$d조 · 번호 자동</string>
     <string name="gameSummaryManual">%1$d조  %2$s</string>
-    <string name="fallbackPolicyLabel">점유 실패 시</string>
+    <string name="fallbackPolicyLabel">지정번호 판매 시</string>
     <string name="fallbackReassignAll">조+번호 모두 자동 배정</string>
     <string name="fallbackKeepGroup">조 유지 · 번호 자동 배정</string>
     <string name="fallbackGiveUp">구매 포기</string>
