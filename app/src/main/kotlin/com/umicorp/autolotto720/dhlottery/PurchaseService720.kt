@@ -11,7 +11,6 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.time.Clock
 import java.time.LocalDateTime
-import java.time.ZonedDateTime
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -44,7 +43,8 @@ class PurchaseService720(
      *  - [Slot720.SemiAuto] → 조 고정, 번호 자동배정
      *  - [Slot720.Manual]   → 조+지정번호. 점유(매진) 시 [NumberConfig720.fallback] 정책 적용.
      */
-    suspend fun purchase(config: NumberConfig720): PurchaseResult720 = withContext(Dispatchers.IO) {
+    suspend fun purchase(config: NumberConfig720, round: Int): PurchaseResult720 = withContext(Dispatchers.IO) {
+        if (config.setMode) return@withContext purchaseSet(round)   // 모든조 세트(SA) — 슬롯 매핑 앞에서 분기
         val specs = config.slots.mapIndexedNotNull { i, slot ->
             when (slot) {
                 Slot720.Unset -> null
@@ -55,13 +55,13 @@ class PurchaseService720(
         }
         if (specs.isEmpty()) throw DhlotteryException("구매할 게임이 없습니다 (번호 탭에서 설정하세요)")
         if (specs.size > 5) throw DhlotteryException("온라인 구매 한도는 5게임입니다 (현재: ${specs.size})")
-        purchaseGames(specs, config.fallback)
+        purchaseGames(specs, config.fallback, round)
     }
 
     /** 반자동 [games]게임(조 1..5 순환, 번호 자동배정) 구매 — 감독 테스트/워커 브리지용 간이 진입점. */
-    suspend fun purchase(games: Int): PurchaseResult720 = withContext(Dispatchers.IO) {
+    suspend fun purchase(games: Int, round: Int): PurchaseResult720 = withContext(Dispatchers.IO) {
         if (games !in 1..5) throw DhlotteryException("게임 수는 1~5개여야 합니다. (현재: $games)")
-        purchaseGames(List(games) { GameSpec.Auto(jo = (it % 5) + 1) }, FallbackPolicy.REASSIGN_ALL)
+        purchaseGames(List(games) { GameSpec.Auto(jo = (it % 5) + 1) }, FallbackPolicy.REASSIGN_ALL, round)
     }
 
     /** 구매 게임 스펙 — 자동/반자동(조 고정, 번호 자동)과 수동(조+지정번호). */
@@ -79,7 +79,8 @@ class PurchaseService720(
         }
     }
 
-    private suspend fun purchaseGames(specs: List<GameSpec>, fallback: FallbackPolicy): PurchaseResult720 {
+    // round는 호출부(PurchaseLock 안)가 확정해 주입 — 서비스 내부 재계산 금지(TOCTOU 방지, 모든 경로 동일 회차).
+    private suspend fun purchaseGames(specs: List<GameSpec>, fallback: FallbackPolicy, round: Int): PurchaseResult720 {
         require(specs.size in 1..5) { "게임 수는 1~5개여야 합니다: ${specs.size}" }
         // 세션 확립(el JSESSIONID 발급) + USER_ID 추출을 먼저 — freeze는 그 다음이어야 game.jsp 쿠키가 저장된다.
         val userId = establishGameSession()
@@ -89,7 +90,6 @@ class PurchaseService720(
         // 같은 세션에 묶이게 한다(회전 시 주문 유실 방지). 브라우저 동작과 동일.
         session.cookies.freeze("JSESSIONID")
         try {
-            val round = Round720.getUpcomingDrawRound(ZonedDateTime.now(clock))
             // GIVE_UP 폴백으로 스킵된 게임은 null → 제외. connPro 성공이 다음 게임의 "구매 진행중" 락을 해제.
             // 전부 스킵돼 빈 결과가 나올 수 있음(지정번호 점유 + 구매 포기) — 이는 오류가 아니라 정책상 정상 결과.
             // 게임 도중 오류(한도 초과 등): 이미 결제된 게임이 있으면 버리지 않고 남은 게임을 중단, 부분 성공으로
@@ -110,6 +110,94 @@ class PurchaseService720(
         } finally {
             session.cookies.unfreeze("JSESSIONID")
         }
+    }
+
+    /**
+     * 모든조 세트(SA) 구매 — makeAutoNo(SA, 5조 공통 번호 1개) → makeOrderNo(SA, 5매 예약) → connPro 1회.
+     * 티켓은 응답 prchsLtNoInfoLstCn 행 수(N)로 판정: N=5 완전, 1≤N<5 부분(전액 원장·PartialFailure),
+     * N=0/형식이상 결과 불명 throw. connPro 이후 실패는 명시 거절만 확정, 그 외 "결과 불명" 마커.
+     */
+    private suspend fun purchaseSet(round: Int): PurchaseResult720 {   // round 주입, 폴백 개념 없음(자동번호 1개 배정)
+        val userId = establishGameSession()
+        if (elJsessionId() == null) throw DhlotteryException("게임 세션 확립 실패 (로그인 상태를 확인하세요)")
+        session.cookies.freeze("JSESSIONID")
+        try {
+            val number = assignSetNumber(round)
+            return buySet(round, number, userId)
+        } finally {
+            session.cookies.unfreeze("JSESSIONID")
+        }
+    }
+
+    /** makeAutoNo를 SA로 1회 호출 → 5개 조 공통 6자리 번호. */
+    private fun assignSetNumber(round: Int): String {
+        val r = encStep(ApiConstants.MAKE_AUTO_NO_720, buildPlain(
+            "ROUND" to round.toString(), "SEL_NO" to "", "BUY_CNT" to "",
+            "AUTO_SEL_SET" to "SA", "SEL_CLASS" to "", "BUY_TYPE" to "A", "ACCS_TYPE" to "01",
+        ))
+        requireSuccess(r, "세트 번호 배정")
+        val number = r.optString("selLotNo").split(",").first()
+        require(number.matches(Regex("\\d{6}"))) { "세트 배정 번호 형식 오류: $number" }
+        return number
+    }
+
+    /** makeOrderNo(SA·5매) → connPro(SA·5매·1회) → 실응답 행 수 기준 티켓. */
+    private fun buySet(round: Int, number: String, userId: String): PurchaseResult720 {
+        val r2 = encStep(ApiConstants.MAKE_ORDER_NO_720, buildPlain(
+            "ROUND" to round.toString(), "SEL_NO" to number, "BUY_CNT" to "5",
+            "AUTO_SEL_SET" to "SA", "SEL_CLASS" to "", "BUY_TYPE" to "A", "ACCS_TYPE" to "01",
+        ))
+        requireSuccess(r2, "세트 주문 생성")
+        val orderNo = r2.optString("orderNo"); val orderDate = r2.optString("orderDate")
+        require(orderNo.isNotBlank() && orderDate.isNotBlank()) { "세트 주문번호 누락" }
+
+        val buyNo = (1..5).joinToString(",") { "$it$number" }
+        val r3 = encStep(ApiConstants.CONN_PRO_720, buildPlain(
+            "ROUND" to round.toString(), "FLAG" to "", "BUY_KIND" to "01",
+            "BUY_NO" to buyNo, "BUY_CNT" to "5", "BUY_SET_TYPE" to "SA,SA,SA,SA,SA",
+            "BUY_TYPE" to "A,A,A,A,A,", "ACCS_TYPE" to "01",
+            "orderNo" to orderNo, "orderDate" to orderDate, "TRANSACTION_ID" to "", "WIN_DATE" to "",
+            "USER_ID" to userId, "PAY_TYPE" to "",
+            "resultErrorCode" to "", "resultErrorMsg" to "", "resultOrderNo" to "",
+            "WORKING_FLAG" to "false", "NUM_CHANGE_TYPE" to "",
+            "auto_process" to "Y", "set_type" to "SA", "classnum" to "", "selnum" to number, "buytype" to "A",
+            "num1" to number[0].toString(), "num2" to number[1].toString(), "num3" to number[2].toString(),
+            "num4" to number[3].toString(), "num5" to number[4].toString(), "num6" to number[5].toString(),
+            "DSEC" to "0", "CLOSE_DATE" to "", "verifyYN" to "N", "curdeposit" to "0", "curpay" to "5000",
+        ))
+        val code = r3.optString("resultCode")
+        // connPro 응답의 모든 비-SUCCESS 코드는 결과 불명(재시도 금지). 명시 무결제 거절 화이트리스트는
+        // 실측(Task 8) 전까지 두지 않는다 — 근거 없는 "재시도 안전" 분류가 곧 이중결제 창이므로 최대 보수.
+        if (code !in SUCCESS_CODES) throw DhlotteryException(rejectionMessage(code, r3))
+        val tickets = parseSetTickets(r3, round, number)
+        if (tickets.isEmpty()) throw DhlotteryException("세트 구매 결과 불명 — 내역으로 대조하세요")
+        val failure = if (tickets.size < 5)
+            PartialFailure(failedGames = 5 - tickets.size, cause = DhlotteryException("세트 부분완료 — 결과 불명분은 내역으로 대조하세요"))
+        else null
+        return PurchaseResult720(round, tickets, tickets.size * UNIT_PRICE, failure)
+    }
+
+    /**
+     * prchsLtNoInfoLstCn 다중 행(세미콜론/개행 구분) → 티켓. 각 행 "번호|주문|일련|회차|조".
+     * 요청 번호([reqNumber]) 일치·조 1..5 범위·조 유일성·최대 5행을 검증해 서버 오응답을 티켓으로 삼지 않는다.
+     */
+    private fun parseSetTickets(r3: JSONObject, round: Int, reqNumber: String): List<Ticket720> {
+        val raw = r3.optJSONObject("data")?.optString("prchsLtNoInfoLstCn").orEmpty()
+        val rows = raw.split(";", "\n").filter { it.isNotBlank() }
+        if (rows.size > 5) throw DhlotteryException("세트 응답 이상(${rows.size}행) — 결과 불명, 내역으로 대조하세요")  // 6행+는 조용히 버리지 않음
+        val seenJo = mutableSetOf<Int>()
+        return rows.mapNotNull { row ->
+            val f = row.split("|")
+            val no = f.getOrNull(0)?.takeIf { it == reqNumber } ?: return@mapNotNull null   // 발권번호=요청번호
+            val jo = f.getOrNull(4)?.toIntOrNull()?.takeIf { it in 1..5 && seenJo.add(it) } ?: return@mapNotNull null
+            Ticket720(round = round, jo = jo, number = no, purchaseDate = LocalDateTime.now(clock))
+        }
+    }
+
+    /** 모든 비-SUCCESS 코드에 "결과 불명" 마커를 심는다(서버 msg 유무와 무관) → classifyPurchaseFailure=Unknown. */
+    private fun rejectionMessage(code: String, r3: JSONObject): String {
+        val msg = r3.optString("resultMsg").ifBlank { r3.optString("resultMessage") }
+        return "구매 실패(code=$code): 결과 불명 — ${msg.ifBlank { "내역으로 대조하세요" }}"
     }
 
     /** el 게임 클라이언트 진입 → el JSESSIONID(암호화 passphrase) 발급 + game.jsp의 USER_ID 반환.
@@ -222,9 +310,7 @@ class PurchaseService720(
             "DSEC" to "0", "CLOSE_DATE" to "", "verifyYN" to verifyYn, "curdeposit" to "0", "curpay" to "1000",
         ))
         val code = r3.optString("resultCode")
-        if (code !in SUCCESS_CODES) {
-            throw DhlotteryException("구매 실패(code=$code): ${r3.optString("resultMsg").ifBlank { r3.optString("resultMessage").ifBlank { "결과 불명 — 내역으로 대조하세요" } }}")
-        }
+        if (code !in SUCCESS_CODES) throw DhlotteryException(rejectionMessage(code, r3))
         // 성공 응답(실측): data.prchsLtNoInfoLstCn = "번호|주문번호|일련번호|회차|조". 형식 이상 시 요청값 폴백.
         val info = r3.optJSONObject("data")?.optString("prchsLtNoInfoLstCn").orEmpty().split("|")
         val soldNo = info.getOrNull(0)?.takeIf { it.matches(Regex("\\d{6}")) } ?: number
@@ -286,7 +372,7 @@ class PurchaseService720(
 
     private companion object {
         const val UNIT_PRICE = 1000
-        val SUCCESS_CODES = setOf("100", "110", "120")  // 100=완료, 110=부분완료, 120=가능 티켓 없음
+        val SUCCESS_CODES = setOf("100")   // 실측 확정된 완료만. 110/120은 Task 8 전까지 결과 불명으로 처리.
         // el 게임 서버는 데스크톱 UA 전제(모바일 UA → 모바일 페이지 리다이렉트). 라이브 캡처에 쓴 UA.
         const val DESKTOP_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"

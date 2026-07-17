@@ -69,16 +69,19 @@ class PurchaseService720Test {
 
     private fun service() = PurchaseService720(auth, session, clock)
 
+    // round는 이제 호출부 주입(TOCTOU 제거) — 테스트도 고정 clock 기준 회차를 넘긴다.
+    private fun theRound() = Round720.getUpcomingDrawRound(java.time.ZonedDateTime.now(clock))
+
     @Test
     fun `rejects zero games before any network call`() = runBlocking {
-        val ex = runCatching { service().purchase(0) }.exceptionOrNull()
+        val ex = runCatching { service().purchase(0, theRound()) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException && ex.message!!.contains("게임 수"))
         assertEquals(0, server.requestCount)
     }
 
     @Test
     fun `rejects six games before any network call`() = runBlocking {
-        val ex = runCatching { service().purchase(6) }.exceptionOrNull()
+        val ex = runCatching { service().purchase(6, theRound()) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException && ex.message!!.contains("게임 수"))
         assertEquals(0, server.requestCount)
     }
@@ -86,7 +89,7 @@ class PurchaseService720Test {
     @Test
     fun `single game happy path parses sold ticket`() = runBlocking {
         server.dispatcher = happyDispatcher(number = "574067", jo = 1)
-        val result = service().purchase(1)
+        val result = service().purchase(1, theRound())
         assertEquals(Round720.getUpcomingDrawRound(java.time.ZonedDateTime.now(clock)), result.round)
         assertEquals(1, result.tickets.size)
         assertEquals(1000, result.amount)
@@ -110,7 +113,7 @@ class PurchaseService720Test {
                 else -> MockResponse().setResponseCode(404)
             }
         }
-        val ex = runCatching { service().purchase(1) }.exceptionOrNull()
+        val ex = runCatching { service().purchase(1, theRound()) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException && ex.message!!.contains("구매 실패"))
         assertEquals(1, connProCount) // 단발 — 재시도 없음
     }
@@ -130,7 +133,7 @@ class PurchaseService720Test {
                 else -> MockResponse().setResponseCode(404)
             }
         }
-        val ex = runCatching { service().purchase(1) }.exceptionOrNull()
+        val ex = runCatching { service().purchase(1, theRound()) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException && ex.message!!.contains("주문 생성"))
         assertEquals(0, connProCount) // 결제 단계 미도달
     }
@@ -155,7 +158,7 @@ class PurchaseService720Test {
                 else -> MockResponse().setResponseCode(404)
             }
         }
-        val result = service().purchase(5)
+        val result = service().purchase(5, theRound())
         assertEquals(1, result.tickets.size)                     // 성공분 보존
         assertEquals(1000, result.amount)
         assertEquals(4, result.partialFailure?.failedGames)     // 실패 게임 + 미시도 잔여
@@ -194,7 +197,7 @@ class PurchaseService720Test {
     @Test
     fun `config semiauto buys assigned number in chosen group`() = runBlocking {
         server.dispatcher = happyDispatcher(number = "123456", jo = 2)
-        val r = service().purchase(cfg(Slot720.SemiAuto(2)))
+        val r = service().purchase(cfg(Slot720.SemiAuto(2)), theRound())
         assertEquals(1, r.tickets.size)
         assertEquals(2, r.tickets[0].jo)
         assertEquals("123456", r.tickets[0].number)
@@ -202,7 +205,7 @@ class PurchaseService720Test {
 
     @Test
     fun `config empty throws before network`() = runBlocking {
-        val ex = runCatching { service().purchase(cfg()) }.exceptionOrNull()
+        val ex = runCatching { service().purchase(cfg(), theRound()) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException && ex.message!!.contains("구매할 게임이 없습니다"))
         assertEquals(0, server.requestCount)
     }
@@ -210,7 +213,7 @@ class PurchaseService720Test {
     @Test
     fun `config manual available buys exact number`() = runBlocking {
         server.dispatcher = manualDispatcher(available = true, number = "111111", jo = 3)
-        val r = service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1))))
+        val r = service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1))), theRound())
         assertEquals(1, r.tickets.size)
         assertEquals(3, r.tickets[0].jo)
         assertEquals("111111", r.tickets[0].number)
@@ -220,7 +223,7 @@ class PurchaseService720Test {
     fun `config manual taken with GIVE_UP skips returns empty result (not error)`() = runBlocking {
         server.dispatcher = manualDispatcher(available = false, number = "111111", jo = 3)
         // 점유 + 구매 포기 = 정책상 정상 결과(오류 아님) → 빈 티켓/0원.
-        val r = service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1)), fallback = FallbackPolicy.GIVE_UP))
+        val r = service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1)), fallback = FallbackPolicy.GIVE_UP), theRound())
         assertTrue(r.tickets.isEmpty())
         assertEquals(0, r.amount)
     }
@@ -228,7 +231,7 @@ class PurchaseService720Test {
     @Test
     fun `config manual taken with KEEP_GROUP reassigns auto number`() = runBlocking {
         server.dispatcher = manualDispatcher(available = false, number = "111111", jo = 3, autoNumber = "888888", autoJo = 3)
-        val r = service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1)), fallback = FallbackPolicy.KEEP_GROUP_RANDOM))
+        val r = service().purchase(cfg(Slot720.Manual(3, listOf(1, 1, 1, 1, 1, 1)), fallback = FallbackPolicy.KEEP_GROUP_RANDOM), theRound())
         assertEquals(1, r.tickets.size)
         assertEquals("888888", r.tickets[0].number)   // 지정번호 대신 자동 재배정
     }
@@ -248,7 +251,7 @@ class PurchaseService720Test {
                 else -> MockResponse().setResponseCode(404)
             }
         }
-        val ex = runCatching { service().purchase(1) }.exceptionOrNull()
+        val ex = runCatching { service().purchase(1, theRound()) }.exceptionOrNull()
         assertTrue(ex is DhlotteryException && ex.message!!.contains("결과 불명"))
     }
 }

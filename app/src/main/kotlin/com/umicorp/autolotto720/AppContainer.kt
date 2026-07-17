@@ -210,7 +210,8 @@ class AppContainer(context: Context) {
             // 번호 탭에 설정된 게임이 있으면 그대로(수동/반자동/전부자동), 없으면 반자동 1매로 계약만 검증.
             val svc = PurchaseService720(auth, session)
             val config = _numberConfig.value
-            val result = if (config.gameCount > 0) svc.purchase(config) else svc.purchase(games = 1)
+            val round = Round720.getUpcomingDrawRound()   // Task 5에서 배선 정교화 — 여기선 컴파일용 최소 주입
+            val result = if (config.gameCount > 0) svc.purchase(config, round) else svc.purchase(games = 1, round = round)
             refreshBalance()
             if (result.tickets.isEmpty()) "구매한 게임 없음 (지정번호 점유 + 구매 포기 정책)"
             else "구매 성공: " + result.tickets.joinToString(", ") { "${it.jo}조 ${it.number}" } +
@@ -303,7 +304,7 @@ class AppContainer(context: Context) {
             val cfg = if (extra) null else requireNotNull(config) { "구매할 게임 설정이 없습니다." }
             val r = try {
                 // 추가 구매는 조·번호 모두 자동(완전자동) N게임 — 저장된 수동 번호 중복 구매 방지.
-                if (extra) svc.purchase(games = autoGames) else svc.purchase(cfg!!)
+                if (extra) svc.purchase(games = autoGames, round = round) else svc.purchase(cfg!!, round)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e             // 취소는 재래핑 금지(구조적 동시성, F1)
                 // 720 서비스는 결과 불명도 DhlotteryException으로 던진다 — 오분류는 중복 결제 위험(F14로 분리).

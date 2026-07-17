@@ -141,7 +141,8 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 step = "purchase"
                 val purchaseService = PurchaseService720(auth, session)
                 val r = try {
-                    purchaseService.purchase(config)
+                    // round는 위 가드와 동일 회차를 주입(TOCTOU 제거) — Task 5에서 배선 정교화.
+                    purchaseService.purchase(config, Round720.getUpcomingDrawRound(now))
                 } catch (purchaseError: Exception) {
                     if (purchaseError is CancellationException) throw purchaseError   // 취소는 [purchase]로 오분류하지 않는다(R3).
                     throw Exception(purchaseError.message ?: "$purchaseError")
