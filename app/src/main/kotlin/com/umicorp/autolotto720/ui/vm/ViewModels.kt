@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umicorp.autolotto720.AppContainer
 import com.umicorp.autolotto720.BudgetExceededException
-import com.umicorp.autolotto720.R
 import com.umicorp.autolotto720.data.FallbackPolicy
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.Slot720
@@ -121,6 +120,8 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
         data object AlreadyPurchased : InstantState   // 첫 구매 확정 직전 워커 선점
         data object SaleClosed : InstantState         // 탭·확정 시점 판매시간 재검증 실패
         data object RoundChanged : InstantState       // 확정 회차 ≠ 실제 회차 — 구매 없이 취소
+        /** 예산 한도 초과 — daily/weekly 값만 담고 문구는 컴포저블이 인앱 언어로 해석(재시도 유도 아님). */
+        data class BudgetExceeded(val daily: Int, val weekly: Int) : InstantState
         /** [guardSaved]=false: 결제 성공했으나 로컬 회차 가드 저장 실패 — 예약 자동구매 중단됨(경고 병기). */
         data class Success(val result: PurchaseResult720, val guardSaved: Boolean = true) : InstantState
         data class Error(val message: String?, val unknown: Boolean) : InstantState
@@ -215,11 +216,8 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
             } catch (e: AppContainer.PurchaseResultUnknownException) {
                 InstantState.Error(message = null, unknown = true)
             } catch (e: BudgetExceededException) {
-                // 예산 초과는 값(daily/weekly)만 담겨 오므로 여기서 3로케일 리소스로 매핑(재시도 유도 아님).
-                InstantState.Error(
-                    container.appContext.getString(R.string.budgetExceeded, e.daily, e.weekly),
-                    unknown = false,
-                )
+                // 값(daily/weekly)만 상태로 넘기고 문구는 컴포저블이 stringResource로 해석 — 인앱 언어 오버라이드 반영.
+                InstantState.BudgetExceeded(e.daily, e.weekly)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e              // 취소는 Error로 오분류하지 않고 전파(F1)
                 InstantState.Error(message = e.message, unknown = false)

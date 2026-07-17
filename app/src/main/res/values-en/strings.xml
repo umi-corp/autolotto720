@@ -195,7 +195,7 @@
     <string name="sectionBudget">💰 Budget Limit</string>
     <string name="budgetDailyLabel">Daily budget limit</string>
     <string name="budgetWeeklyLabel">Per-draw budget limit</string>
-    <string name="budgetExceeded">Budget limit reached (daily ₩%1$d · draw ₩%2$d)</string>
+    <string name="budgetExceeded">Budget limit reached (daily ₩%1$s · draw ₩%2$s)</string>
     <string name="buttonConfirm">OK</string>
     <string name="sectionDonation">Support Developer</string>
     <string name="donationTitle">Buy Me a Coffee</string>

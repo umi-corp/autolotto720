@@ -202,7 +202,7 @@
     <string name="sectionBudget">💰 예산 한도</string>
     <string name="budgetDailyLabel">1일 예산 한도</string>
     <string name="budgetWeeklyLabel">회차 예산 한도</string>
-    <string name="budgetExceeded">예산 한도에 도달했습니다 (1일 %1$d원 · 회차 %2$d원)</string>
+    <string name="budgetExceeded">예산 한도에 도달했습니다 (1일 %1$s원 · 회차 %2$s원)</string>
     <string name="buttonConfirm">확인</string>
     <string name="sectionDonation">개발자 후원하기</string>
     <string name="donationTitle">커피 한 잔 후원</string>

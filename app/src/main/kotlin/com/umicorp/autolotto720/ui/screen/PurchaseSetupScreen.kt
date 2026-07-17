@@ -1287,6 +1287,12 @@ private fun InstantPurchaseDialogs(state: InstantState, vm: PurchaseSetupViewMod
             text = stringResource(R.string.instantRoundChanged),
             onDismiss = { vm.dismissInstant() },
         )
+        is InstantState.BudgetExceeded -> InstantNoticeDialog(
+            title = stringResource(R.string.instantErrorTitle),
+            // 문구는 여기서 인앱 언어로 해석 — 금액은 설정 화면과 동일하게 formatNumber로 천단위 구분.
+            text = stringResource(R.string.budgetExceeded, formatNumber(state.daily), formatNumber(state.weekly)),
+            onDismiss = { vm.dismissInstant() },
+        )
         is InstantState.Error -> InstantNoticeDialog(
             title = stringResource(R.string.instantErrorTitle),
             text = if (state.unknown) stringResource(R.string.instantUnknownResult)

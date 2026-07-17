@@ -55,7 +55,7 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 class AppContainer(context: Context) {
 
-    val appContext: Context = context.applicationContext
+    private val appContext: Context = context.applicationContext
 
     // === 공유 서비스 ===
     val store = SecureStore(appContext)

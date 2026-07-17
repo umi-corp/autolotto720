@@ -195,7 +195,7 @@
     <string name="sectionBudget">💰 予算上限</string>
     <string name="budgetDailyLabel">1日の購入上限</string>
     <string name="budgetWeeklyLabel">抽選ごとの購入上限</string>
-    <string name="budgetExceeded">購入上限に達しました (1日 ₩%1$d · 抽選 ₩%2$d)</string>
+    <string name="budgetExceeded">購入上限に達しました (1日 ₩%1$s · 抽選 ₩%2$s)</string>
     <string name="buttonConfirm">確認</string>
     <string name="sectionDonation">開発者を応援する</string>
     <string name="donationTitle">コーヒー1杯おごる</string>

@@ -838,8 +838,8 @@ private fun BudgetDialog(title: String, initial: Int, onDismiss: () -> Unit, onC
     )
 }
 
-/** 예산 입력 정규화(순수) — 1,000 단위 반올림 후 1,000~150,000 클램프. */
-private fun coerceBudget(won: Int): Int = ((won + 500) / 1000 * 1000).coerceIn(1000, 150000)
+/** 예산 입력 정규화(순수) — 1,000~150,000 클램프 후 1,000 단위 반올림. 클램프를 먼저 해 초대형 입력의 won+500 오버플로를 막는다(경계: 1499→1000, 1500→2000, 150000 유지). */
+private fun coerceBudget(won: Int): Int = (won.coerceIn(1000, 150000) + 500) / 1000 * 1000
 
 /** M3 시간 선택 다이얼로그(원본 showTimePicker, 24시간제). */
 @Composable
