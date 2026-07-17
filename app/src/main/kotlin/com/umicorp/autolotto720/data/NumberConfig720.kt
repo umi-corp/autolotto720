@@ -54,32 +54,35 @@ data class NumberConfig720(
     val fallback: FallbackPolicy,
     val schemaVersion: Int,
     val revision: Long,
+    val setMode: Boolean = false,
 ) {
     init { require(slots.size == 5) { "슬롯은 5개여야 합니다: ${slots.size}개" } }
 
-    /** 설정된(=구매 대상) 게임 수. Unset은 객체이므로 "non-null"이 아닌 "non-Unset"으로 센다. */
-    val gameCount: Int get() = slots.count { it != Slot720.Unset }
+    /** 설정된(=구매 대상) 게임 수. 세트 모드는 5개 조 = 항상 5게임. */
+    val gameCount: Int get() = if (setMode) 5 else slots.count { it != Slot720.Unset }
 
     /** canonical JSON(필드 고정 순서) — 저장·해시 공용. */
     fun toJson(): String = JSONObject().apply {
-        put("schemaVersion", schemaVersion)
+        put("schemaVersion", if (setMode) 2 else 1)   // 세트 미사용자는 v1 유지 → 구버전 앱 무손실
         put("revision", revision)
         put("fallback", fallback.name)
+        put("setMode", setMode)
         put("slots", JSONArray().apply { slots.forEach { put(slotToJson(it)) } })
     }.toString()
 
     companion object {
-        /** 현재 스키마 버전. 미지(미래) 버전은 휴리스틱 파싱 금지 → 안전 기본값으로 떨어뜨린다. */
-        const val CURRENT_SCHEMA = 1
+        /** 현재 스키마 버전. setMode(세트) 데이터만 v2. 미지(미래) 버전은 휴리스틱 파싱 금지 → 안전 기본값으로. */
+        const val CURRENT_SCHEMA = 2
+        private const val MIN_SCHEMA = 1
 
         /** 전부 Unset·기본 폴백·revision 0(구매 안 함). 초기설정은 게임 없음 — A 게임부터 직접 설정. */
         fun empty(): NumberConfig720 =
-            NumberConfig720(List(5) { Slot720.Unset }, FallbackPolicy.REASSIGN_ALL, CURRENT_SCHEMA, 0L)
+            NumberConfig720(List(5) { Slot720.Unset }, FallbackPolicy.REASSIGN_ALL, 1, 0L, setMode = false)
 
         /**
          * 저장 JSON → 설정. 손상·미지 스키마·범위 밖 값은 **거절/안전화**(설계 §3, §10):
          *  - 파싱 자체 실패 → null(호출부가 마이그레이션/기본값으로 폴백).
-         *  - schemaVersion ≠ CURRENT → 휴리스틱 금지, [empty] 반환.
+         *  - schemaVersion ∉ MIN..CURRENT(미래 버전) → 휴리스틱 금지, [empty] 반환. v1·v2는 수용.
          *  - 개별 슬롯 손상(조∉1..5·자릿수≠6·digit∉0..9·미지 type) → 그 슬롯만 Unset으로.
          *  - 슬롯 수 5 초과는 잘라내고, 부족하면 Unset으로 채운다.
          */
@@ -87,7 +90,8 @@ data class NumberConfig720(
             if (json.isNullOrBlank()) return null
             val obj = runCatching { JSONObject(json) }.getOrNull() ?: return null
             val schema = obj.optInt("schemaVersion", -1)
-            if (schema != CURRENT_SCHEMA) return empty()   // 미지 버전: 휴리스틱 파싱 금지
+            if (schema !in MIN_SCHEMA..CURRENT_SCHEMA) return empty()   // 미지(미래) 버전만 fail-closed
+            val setMode = schema >= 2 && obj.optBoolean("setMode", false)   // 세트는 v2에서만 — v1의 오탁 필드 무시
             val revision = obj.optLong("revision", 0L).coerceAtLeast(0L)
             val fallback = runCatching { FallbackPolicy.valueOf(obj.optString("fallback")) }
                 .getOrDefault(FallbackPolicy.REASSIGN_ALL)
@@ -98,7 +102,9 @@ data class NumberConfig720(
                     slots[i] = arr.optJSONObject(i)?.let { slotFromJson(it) } ?: Slot720.Unset
                 }
             }
-            return NumberConfig720(slots, fallback, CURRENT_SCHEMA, revision)
+            // schemaVersion 필드는 CURRENT로 정규화(원래 계약) — 디스크 v1/v2 구분은 setMode가 담당,
+            // 저장 시 toJson이 setMode로 스키마를 재도출하므로 인메모리 값은 왕복 불변식만 지키면 된다.
+            return NumberConfig720(slots, fallback, CURRENT_SCHEMA, revision, setMode)
         }
 
         private fun slotToJson(slot: Slot720): JSONObject = JSONObject().apply {
