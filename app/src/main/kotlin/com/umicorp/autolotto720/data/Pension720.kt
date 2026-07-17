@@ -6,6 +6,22 @@ import java.time.LocalDateTime
 enum class Rank720 { FIRST, SECOND, THIRD, FOURTH, FIFTH, SIXTH, SEVENTH, BONUS, NONE, PENDING }
 
 /**
+ * 내역 볼 강조용 — 이 등수가 맞힌 "뒤 k자리" 개수. [RankChecker720]의 접미사 규칙과 1:1.
+ * 1·2등·보너스=6(전체 일치), 3~7등=5·4·3·2·1자리, 미당첨/추첨전=0.
+ * 720은 끝자리 1개만 맞아도 7등이라, NONE(낙첨)은 실제 맞은 자리 0 → 6자리 전부 흐림에 쓰인다.
+ */
+val Rank720.matchedDigits: Int
+    get() = when (this) {
+        Rank720.FIRST, Rank720.SECOND, Rank720.BONUS -> 6
+        Rank720.THIRD -> 5
+        Rank720.FOURTH -> 4
+        Rank720.FIFTH -> 3
+        Rank720.SIXTH -> 2
+        Rank720.SEVENTH -> 1
+        Rank720.NONE, Rank720.PENDING -> 0
+    }
+
+/**
  * 구매한 연금복권720+ 티켓 1장.
  * number/bonus는 6자리 0패딩 문자열 — leading zero 보존을 위해 Int가 아니라 String.
  */

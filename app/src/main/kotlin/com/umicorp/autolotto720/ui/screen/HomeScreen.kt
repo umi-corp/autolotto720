@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -55,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -217,22 +215,6 @@ private fun CountdownUnit(value: String, label: String, animated: Boolean = fals
     }
 }
 
-/** 스태거 팝인 래퍼 — [key]가 바뀌면(새 회차 로드) index 순서대로 bouncy 스케일 등장. */
-@Composable
-private fun PopIn(index: Int, key: Any, content: @Composable () -> Unit) {
-    val scale = remember(key) { Animatable(0f) }
-    LaunchedEffect(key) {
-        delay(MotionSpecs.staggerDelay(index).toLong())
-        scale.animateTo(1f, MotionSpecs.bouncy())
-    }
-    Box(
-        Modifier.graphicsLayer {
-            scaleX = scale.value
-            scaleY = scale.value
-        },
-    ) { content() }
-}
-
 @Composable
 private fun WinningNumbers(winning: WinningNumbers720?, loading: Boolean) {
     Column {
@@ -254,20 +236,22 @@ private fun WinningNumbers(winning: WinningNumbers720?, loading: Boolean) {
                         )
                         1 -> winning?.let { w ->
                             // 720은 볼 그리드가 아니라 조+6자리 표기 — 1등 번호 + 보너스(조 무관) 두 줄.
+                            // 645처럼 볼을 하나씩 스태거 팝인(JoNumberDisplay ballPopKey) — 행 통짜 팝인 대체.
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                PopIn(index = 0, key = w.round) {
-                                    JoNumberDisplay(joLabel = localizedJoLabel(w.jo), number = w.number)
-                                }
-                                PopIn(index = 1, key = w.round) {
-                                    JoNumberDisplay(
-                                        joLabel = stringResource(R.string.rankBonus),
-                                        number = w.bonusNumber,
-                                        accent = LgGold,
-                                    )
-                                }
+                                JoNumberDisplay(
+                                    joLabel = localizedJoLabel(w.jo),
+                                    number = w.number,
+                                    ballPopKey = w.round,
+                                )
+                                JoNumberDisplay(
+                                    joLabel = stringResource(R.string.rankBonus),
+                                    number = w.bonusNumber,
+                                    accent = LgGold,
+                                    ballPopKey = w.round,
+                                )
                             }
                         }
                         else -> Text(

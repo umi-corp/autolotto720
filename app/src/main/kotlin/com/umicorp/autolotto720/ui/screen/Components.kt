@@ -1,6 +1,7 @@
 package com.umicorp.autolotto720.ui.screen
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,12 +24,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
@@ -39,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.umicorp.autolotto720.ui.theme.MotionSpecs
 import com.umicorp.autolotto720.ui.theme.ctaGradient
 import com.umicorp.autolotto720.ui.theme.heroGradient
+import kotlinx.coroutines.delay
 
 // 동행복권 연금복권720+ 공식 볼 팔레트 — 흰 볼 + 자리별 색 테두리(사이트 CSS --d-wf-1n~6n 실측값).
 private val PensionDigitRings = listOf(
@@ -61,6 +67,8 @@ fun JoNumberDisplay(
     number: String,
     modifier: Modifier = Modifier,
     accent: Color = MaterialTheme.colorScheme.primary,
+    matchedSuffix: Int = -1,   // -1=추첨 전(균일 렌더). 0..6=추첨완료 시 맞은 "뒤 k자리"(Rank720.matchedDigits).
+    ballPopKey: Any? = null,   // null=정적(내역). 비null(예: 회차)=홈 등장 시 볼별 스태거 팝인(645 동일).
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
@@ -75,29 +83,57 @@ fun JoNumberDisplay(
         Spacer(Modifier.width(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             number.forEachIndexed { i, ch ->
-                PensionBall(digit = ch, ring = PensionDigitRings.getOrElse(i) { PensionDigitRings.last() })
+                // 추첨완료(matchedSuffix>=0)면 맞은 뒤 k자리는 강조, 앞자리는 흐림. 추첨 전(-1)은 균일.
+                val matched = matchedSuffix >= 0 && i >= number.length - matchedSuffix
+                BallPop(index = i, key = ballPopKey) {
+                    PensionBall(
+                        digit = ch,
+                        ring = PensionDigitRings.getOrElse(i) { PensionDigitRings.last() },
+                        dimmed = matchedSuffix >= 0 && !matched,
+                        matched = matched,
+                    )
+                }
             }
         }
     }
 }
 
-/** 연금복권 공식 스타일 볼 1개 — 흰 원 + 색 테두리 + 볼드 숫자. */
+/** 볼 스태거 팝인 — [key]!=null이면 index 순서로 bouncy 스케일 등장(홈 당첨번호, 645 PopIn 동일). null=정적(내역). */
 @Composable
-private fun PensionBall(digit: Char, ring: Color) {
+private fun BallPop(index: Int, key: Any?, content: @Composable () -> Unit) {
+    if (key == null) {
+        content()
+        return
+    }
+    val scale = remember(key) { Animatable(0f) }
+    LaunchedEffect(key) {
+        delay(MotionSpecs.staggerDelay(index).toLong())
+        scale.animateTo(1f, MotionSpecs.bouncy())
+    }
+    Box(Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value }) { content() }
+}
+
+/**
+ * 연금복권 공식 스타일 볼 1개 — 흰 원 + 색 테두리 + 볼드 숫자.
+ * [matched]=추첨에서 맞은 자리 → 링 색으로 채워 강조(흰 숫자). [dimmed]=안 맞은 자리 → alpha로 흐림.
+ */
+@Composable
+private fun PensionBall(digit: Char, ring: Color, dimmed: Boolean = false, matched: Boolean = false) {
     Box(
         modifier = Modifier
             .size(30.dp)
             .clip(CircleShape)
-            .background(Color.White)
-            .border(2.5.dp, ring, CircleShape),
+            .background(if (matched) ring else Color.White)
+            .border(2.5.dp, ring, CircleShape)
+            .alpha(if (dimmed) 0.32f else 1f),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             digit.toString(),
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp,
-            // 테마 무관 고정 네이비 — 흰 볼 위 가독성(공식 사이트 검정 숫자에 대응하는 브랜드 톤).
-            color = Color(0xFF1E2D50),
+            // 맞은(채워진) 볼은 흰 숫자로 대비, 그 외 테마 무관 고정 네이비(공식 사이트 검정 숫자 톤).
+            color = if (matched) Color.White else Color(0xFF1E2D50),
         )
     }
 }

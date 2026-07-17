@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import com.umicorp.autolotto720.R
 import com.umicorp.autolotto720.data.Rank720
 import com.umicorp.autolotto720.data.Ticket720
+import com.umicorp.autolotto720.data.matchedDigits
 import com.umicorp.autolotto720.ui.appViewModel
 import com.umicorp.autolotto720.ui.theme.LgGold
 import com.umicorp.autolotto720.ui.theme.LgTeal
@@ -80,6 +81,10 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
     val canLoadMore by vm.canLoadMore.collectAsState()
     val error by vm.error.collectAsState()
     val isLoggedIn by vm.isLoggedIn.collectAsState()
+
+    // 회차별 그룹핑(autolotto 645 참조): 평탄화된 티켓을 회차로 묶어 카드 1개 안에 조+번호 행들로.
+    // groupBy는 LinkedHashMap이라 dhlottery 최신순(첫 등장 회차 먼저)을 그대로 보존한다.
+    val rounds = remember(tickets) { tickets.groupBy { it.round }.map { it.key to it.value } }
 
     Scaffold(
         modifier = modifier.creamPageBackground(),
@@ -132,7 +137,7 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
                             contentPadding = PaddingValues(20.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
-                            itemsIndexed(tickets) { i, item -> TicketCard(item, index = i) }
+                            itemsIndexed(rounds) { i, g -> RoundCard(round = g.first, tickets = g.second, index = i) }
                             if (canLoadMore) {
                                 item { LoadMoreButton(loading = loadingMore, onClick = vm::loadMore) }
                             }
@@ -202,14 +207,23 @@ private fun LoadMoreButton(loading: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** 티켓 1건 카드: 헤더(회차+날짜+상태) · 조+번호 · (당첨 시) 당첨금/연금 푸터. */
+/**
+ * 회차 1건 카드(autolotto 645 HistoryCard 대응): 헤더(회차+날짜+집계 상태) · 티켓별 조+번호 행
+ * (추첨완료 시 행별 등수 필) · (당첨 시) 최고 등수 당첨금/연금 푸터.
+ *
+ * 720은 한 회차 티켓들이 동시 추첨되므로 미추첨/추첨완료가 균일 — 집계 상태를 헤더에 표시하고,
+ * 조별 등수는 645의 게임 A~E 필처럼 행 우측에 붙인다.
+ */
 @Composable
-private fun TicketCard(item: Ticket720, index: Int) {
-    val rank = item.rank
-    val pending = !item.checked || rank == null || rank == Rank720.PENDING
-    val noWin = rank == Rank720.NONE
-    val winner = !pending && !noWin
-    val dateStr = "%04d-%02d-%02d".format(item.purchaseDate.year, item.purchaseDate.monthValue, item.purchaseDate.dayOfMonth)
+private fun RoundCard(round: Int, tickets: List<Ticket720>, index: Int) {
+    fun pendingOf(t: Ticket720) = !t.checked || t.rank == null || t.rank == Rank720.PENDING
+    val roundPending = tickets.any { pendingOf(it) }
+    val winners = tickets.filter { !pendingOf(it) && it.rank != Rank720.NONE }
+    val bestWinner = winners.minByOrNull { it.rank!!.ordinal }  // ordinal 오름차순 = 상위 등수
+    val winner = bestWinner != null
+    val noWin = !roundPending && !winner
+    val date = tickets.first().purchaseDate
+    val dateStr = "%04d-%02d-%02d".format(date.year, date.monthValue, date.dayOfMonth)
 
     // 시그니처 모션: 스태거 등장 (fade + rise). ponytail: 스크롤로 재진입 시 재생됨 — 짧고 은은해 허용.
     var shown by remember { mutableStateOf(false) }
@@ -237,7 +251,7 @@ private fun TicketCard(item: Ticket720, index: Int) {
             .then(if (winner) Modifier.border(2.dp, LgGold, shape) else Modifier),
         contentPadding = PaddingValues(0.dp),
     ) {
-        // 헤더: 제 {n}회 + 날짜 + StatusPill
+        // 헤더: 제 {n}회 + 날짜 + 집계 StatusPill
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -248,7 +262,7 @@ private fun TicketCard(item: Ticket720, index: Int) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    stringResource(R.string.roundLabel, item.round),
+                    stringResource(R.string.roundLabel, round),
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleMedium,
@@ -261,21 +275,51 @@ private fun TicketCard(item: Ticket720, index: Int) {
                 )
             }
             when {
-                pending -> StatusPill(stringResource(R.string.rankPendingDraw), PillTone.Pending)
+                roundPending -> StatusPill(stringResource(R.string.rankPendingDraw), PillTone.Pending)
                 winner -> StatusPill(
-                    stringResource(R.string.rankWithEmoji, localizedRank(rank!!)),
+                    stringResource(R.string.rankWithEmoji, localizedRank(bestWinner!!.rank!!)),
                     PillTone.Win,
                 )
                 else -> StatusPill(stringResource(R.string.rankNoWin720), PillTone.Lose)
             }
         }
 
-        // 본문: 조 + 6자리 번호
-        Column(Modifier.padding(16.dp)) {
-            JoNumberDisplay(joLabel = localizedJoLabel(item.jo), number = item.number)
+        // 본문: 게임 A~E 라벨 + 조 + 6자리 번호 (+ 추첨완료 시 맞은 뒤자리 강조·행별 등수 필).
+        // 645 HistoryCard의 게임행(letter + 볼 + 상태필) 대응.
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            tickets.forEachIndexed { i, t ->
+                val drawn = !pendingOf(t)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        ('A' + i).toString(),
+                        modifier = Modifier.width(20.dp),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    // 추첨완료면 맞은 뒤 k자리 강조(나머지 흐림); 미추첨이면 균일(-1).
+                    JoNumberDisplay(
+                        joLabel = localizedJoLabel(t.jo),
+                        number = t.number,
+                        matchedSuffix = if (drawn) t.rank!!.matchedDigits else -1,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    // 미추첨이면 헤더의 '확인 대기'가 대표하므로 행별 필 생략(클러터 방지). ponytail: 좁은 기기
+                    // 당첨행에서 볼+필이 겹치면 볼 크기 축소 필요할 수 있음 — 당첨은 드물어 이월.
+                    if (drawn) {
+                        val r = t.rank!!
+                        if (r == Rank720.NONE) StatusPill(stringResource(R.string.rankNoWin720), PillTone.Lose)
+                        else StatusPill(stringResource(R.string.rankWithEmoji, localizedRank(r)), PillTone.Win)
+                    }
+                }
+            }
         }
 
-        // 푸터: 당첨금(3~7등) / 연금 문구(1·2등·보너스) — 골드 밴드
+        // 푸터: 최고 등수 당첨금(3~7등) / 연금 문구(1·2등·보너스) — 골드 밴드
         if (winner) {
             Box(
                 modifier = Modifier
@@ -285,7 +329,7 @@ private fun TicketCard(item: Ticket720, index: Int) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    localizedPrize(rank!!, item.prize),
+                    localizedPrize(bestWinner!!.rank!!, bestWinner.prize),
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.ExtraBold,
                     style = MaterialTheme.typography.titleMedium,
