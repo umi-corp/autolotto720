@@ -188,6 +188,7 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
     var rollingAllAuto by remember { mutableStateOf(false) }
     var showAllAutoDialog by remember { mutableStateOf(false) }
     var showApplyAllDialog by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }   // 메인 저장 진행 중 — 버튼 비활성화(중복 저장 방지). 프로세스 사망 시 리셋 의도로 remember.
 
     fun setDigits(vals: List<Int?>) { for (i in 0..5) digits[i] = vals.getOrNull(i) }
 
@@ -525,16 +526,23 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                 val gameCount = if (setMode) 5 else committed.count { it != Slot720.Unset }
                 Button(
                     onClick = {
-                        vm.saveConfig(committed.toList(), fallback, setMode)
-                        saved = true
+                        // commit 성공 후에만 saved·완료 스낵바 — 세트 토글과 동일 게이트(saveConfigAwait).
+                        // fire-and-forget saved=true는 commit 실패/대기 중 화면(녹색 saved)≠디스크(옛 설정)를 만들고
+                        // saved=true라 미저장 CTA 가드까지 통과 → 워커가 옛 설정으로 결제. 저장 중 버튼 비활성화.
+                        saving = true
                         scope.launch {
-                            snackbar.showSnackbar(
-                                if (gameCount == 0) context.getString(R.string.snackbarSaveEmpty)
-                                else context.getString(R.string.snackbarSaveSuccess, gameCount),
-                            )
+                            val ok = vm.saveConfigAwait(committed.toList(), fallback, setMode)
+                            saving = false
+                            saved = ok
+                            if (ok) {
+                                snackbar.showSnackbar(
+                                    if (gameCount == 0) context.getString(R.string.snackbarSaveEmpty)
+                                    else context.getString(R.string.snackbarSaveSuccess, gameCount),
+                                )
+                            }
                         }
                     },
-                    enabled = !locked,
+                    enabled = !locked && !saving,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = saveContainer, contentColor = saveContent),

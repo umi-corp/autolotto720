@@ -382,13 +382,17 @@ class AppContainer(context: Context) {
                 // money-path 방호: recordSpend(EncryptedSharedPreferences commit) 예외가 PurchaseRecordFailedException 경로를
                 // 이탈해 ViewModel 일반 catch → "구매 실패" 오보(결제 완료 후)로 새지 않게 runCatching(setLastPurchase와 일관).
                 val ledgerOk = runCatching { recordSpend(round, today, if (r.partialFailure != null) attempt else r.amount) }.getOrDefault(false)  // 부분은 시도 전액
-                if (committed && ledgerOk) {
-                    runCatching { store.clearPendingPurchase() }   // 가드+원장 반영 완료 → PENDING 해제 안전
-                } else {
+                // 부분 성공이라도 미확정(Unknown) 게임이 있으면 PENDING 유지 — extra 재진입 이중결제 창을 막는다.
+                // partialFailure가 없거나(완전 성공) cause가 Rejected(서버 확정 거절, 무결제)일 때만 PENDING 해제 안전.
+                val resolvable = r.partialFailure == null || classifyPurchaseFailure(r.partialFailure!!.cause) is PurchaseFailure.Rejected
+                if (committed && ledgerOk && resolvable) {
+                    runCatching { store.clearPendingPurchase() }   // 가드+원장 반영 완료 & 미확정 게임 없음 → PENDING 해제 안전
+                } else if (!committed || !ledgerOk) {
                     // 디스크 가드/원장 미반영 → 워커 재구매 가능. 예약 자동구매 중단 + PENDING을 백업으로 유지.
                     runCatching { setAutoEnabled(false) }
                     throw PurchaseRecordFailedException(r)               // 결제 성공은 유지(재결제 문구 금지)
                 }
+                // committed && ledgerOk 이지만 !resolvable(부분 Unknown) → PENDING 유지, 예외는 안 던짐(부분 성공은 성공 결과).
             }
             r
         } ?: return null
@@ -625,7 +629,12 @@ fun parsePending(json: String?): SpendEntry? {
     if (json.isNullOrBlank()) return null
     val o = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return null
     if (!o.has("round")) return null
-    return SpendEntry(o.optInt("round"), o.optLong("epochDay"), o.optInt("amount"))
+    // 음수 amount/epochDay는 손상 PENDING — BudgetGuard.check의 pToday/pRound에 음수로 기여해 예산 검사를
+    // 완화(money 가드 fail-open)하므로 거절한다(parseLedger의 amount<0 스킵과 대칭, fail-closed).
+    val amount = o.optInt("amount", -1)
+    val epochDay = o.optLong("epochDay", -1)
+    if (amount < 0 || epochDay < 0) return null
+    return SpendEntry(o.optInt("round"), epochDay, amount)
 }
 
 /** 예산 한도 초과로 결제에 진입하지 못한 경우 — 재시도 유도 금지. daily/weekly 값만 담고 표시는 UI가 리소스로 매핑. */

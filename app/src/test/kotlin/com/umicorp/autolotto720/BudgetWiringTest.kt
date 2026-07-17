@@ -18,4 +18,9 @@ class BudgetWiringTest {
     @Test fun `parsePending returns null for blank or corrupt`() {
         assertNull(parsePending(null)); assertNull(parsePending("")); assertNull(parsePending("{}"))
     }
+    @Test fun `parsePending rejects negative amount or epochDay (money guard fail-closed)`() {
+        // 손상 PENDING의 음수 amount/epochDay가 BudgetGuard.check를 완화하지 않도록 null(=거절) 반환.
+        assertNull(parsePending("""{"round":325,"epochDay":100,"amount":-5000}"""))
+        assertNull(parsePending("""{"round":325,"epochDay":-1,"amount":5000}"""))
+    }
 }

@@ -197,7 +197,7 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 } catch (purchaseError: Exception) {
                     if (purchaseError is CancellationException) throw purchaseError   // 취소는 [purchase]로 오분류하지 않는다(R3).
                     when (classifyPurchaseFailure(purchaseError)) {
-                        is PurchaseFailure.Rejected -> store.clearPendingPurchase()   // 무결제 확정 — PENDING 해제
+                        is PurchaseFailure.Rejected -> runCatching { store.clearPendingPurchase() }   // 무결제 확정 — PENDING 해제(clear 예외가 서버 거절 메시지를 prefs 예외로 덮지 않게 방호, 즉시구매와 대칭)
                         is PurchaseFailure.Unknown -> withContext(NonCancellable) {   // 결과 불명 — 가드 커밋 + 전액 원장 + PENDING 유지(즉시구매와 대칭, CE가 보상을 끊지 못하게)
                             // money-path 방호: 원장/가드 commit 예외가 아래 [purchase] 래핑을 이탈하지 않게 runCatching(즉시구매와 대칭).
                             runCatching { store.setLastPurchase(round, userId) }
@@ -224,7 +224,17 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                         store.setAutoEnabled(false)                  // doWork 알람 재등록 게이트도 내려 재실행 차단
                         throw Exception("회차 기록 저장에 실패했습니다.")   // step=commit → [commit] 래핑 → 비재시도
                     }
-                    if (ledgerOk) store.clearPendingPurchase()   // 가드+원장 반영 완료 → PENDING 해제. 원장 실패 시 PENDING 유지
+                    // 원장 저장 실패도 즉시구매(PurchaseRecordFailedException)와 대칭 — "자동 구매 완료"로 단정하지 않는다.
+                    // 회차 가드는 이미 커밋돼 재구매는 막히니 결제 성공은 유지하되, [commit] 안내("구매됐으나 기록 저장
+                    // 실패 — 내역 확인") + 예약 자동구매 중단(setAutoEnabled=false) + PENDING 유지(원장 미반영 백업).
+                    if (!ledgerOk) {
+                        store.setAutoEnabled(false)
+                        throw Exception("예산 기록 저장에 실패했습니다.")   // step=commit → [commit] 래핑 → 비재시도, PENDING 유지
+                    }
+                    // 부분 성공이라도 미확정(Unknown) 게임이 있으면 PENDING 유지 — 재진입 이중결제 창을 막는다(즉시구매와 대칭).
+                    // partialFailure가 없거나(완전 성공) cause가 Rejected(무결제)일 때만 PENDING 해제 안전.
+                    val resolvable = r.partialFailure == null || classifyPurchaseFailure(r.partialFailure!!.cause) is PurchaseFailure.Rejected
+                    if (resolvable) store.clearPendingPurchase()   // commit+원장 반영 완료 & 미확정 게임 없음 → PENDING 해제
                 }
                 r
             }
