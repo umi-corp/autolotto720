@@ -214,7 +214,8 @@ class AppContainer(context: Context) {
             refreshBalance()
             if (result.tickets.isEmpty()) "구매한 게임 없음 (지정번호 점유 + 구매 포기 정책)"
             else "구매 성공: " + result.tickets.joinToString(", ") { "${it.jo}조 ${it.number}" } +
-                " (${result.round}회, ₩${result.amount})"
+                " (${result.round}회, ₩${result.amount})" +
+                (result.partialFailure?.let { " · 미결제 ${it.failedGames}게임: ${it.cause.message}" } ?: "")
         } catch (e: Exception) {
             "구매 실패: ${e.message}"
         }

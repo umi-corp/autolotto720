@@ -239,4 +239,6 @@
     <string name="instantErrorFallback">구매에 실패했습니다. 다시 시도해주세요.</string>
     <string name="instantNeedsSetup">구매할 조·번호를 먼저 설정하고 저장해주세요.</string>
     <string name="instantGuardSaveFailed">구매는 성공했으나 회차 기록 저장에 실패했습니다. 중복 결제를 막기 위해 예약 자동구매 설정과 구매 내역을 확인해주세요.</string>
+    <string name="instantPartialRejected">나머지 %1$d게임은 서버가 거절해 구매되지 않았습니다.</string>
+    <string name="instantPartialUnknown">나머지 %1$d게임은 결과를 확인하지 못했습니다. 내역 탭에서 확인해주세요.</string>
 </resources>

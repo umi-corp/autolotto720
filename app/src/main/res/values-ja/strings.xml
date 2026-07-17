@@ -231,4 +231,6 @@
     <string name="instantErrorFallback">購入に失敗しました。もう一度お試しください。</string>
     <string name="instantNeedsSetup">先に購入する組·番号を設定して保存してください。</string>
     <string name="instantGuardSaveFailed">購入は成功しましたが、回次記録の保存に失敗しました。二重決済を防ぐため、予約自動購入の設定と購入履歴をご確認ください。</string>
+    <string name="instantPartialRejected">残り%1$d件はサーバーに拒否され、購入されませんでした。</string>
+    <string name="instantPartialUnknown">残り%1$d件の結果を確認できませんでした。履歴タブでご確認ください。</string>
 </resources>

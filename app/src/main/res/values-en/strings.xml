@@ -231,4 +231,6 @@
     <string name="instantErrorFallback">Purchase failed. Please try again.</string>
     <string name="instantNeedsSetup">Set up and save your group and numbers before buying.</string>
     <string name="instantGuardSaveFailed">Purchase succeeded, but saving the round record failed. To avoid a double charge, please check your scheduled auto-purchase setting and your purchase history.</string>
+    <string name="instantPartialRejected">The remaining %1$d game(s) were declined by the server and not purchased.</string>
+    <string name="instantPartialUnknown">Could not confirm the remaining %1$d game(s). Please check the History tab.</string>
 </resources>

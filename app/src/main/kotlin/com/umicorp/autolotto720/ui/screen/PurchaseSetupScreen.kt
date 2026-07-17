@@ -105,7 +105,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.umicorp.autolotto720.PurchaseFailure
 import com.umicorp.autolotto720.R
+import com.umicorp.autolotto720.classifyPurchaseFailure
 import com.umicorp.autolotto720.data.FallbackPolicy
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.Slot720
@@ -1202,6 +1204,19 @@ private fun InstantPurchaseDialogs(state: InstantState, vm: PurchaseSetupViewMod
                                 modifier = Modifier.padding(vertical = 2.dp),
                             )
                         }
+                    }
+                    // 다게임 구매가 도중에 끊긴 부분 성공 — 미결제 게임 수를 경고(실패의 재시도 안전성으로 문구 분기).
+                    state.result.partialFailure?.let { pf ->
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            stringResource(
+                                if (classifyPurchaseFailure(pf.cause) is PurchaseFailure.Unknown) R.string.instantPartialUnknown
+                                else R.string.instantPartialRejected,
+                                pf.failedGames,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                     // 결제는 성공했으나 로컬 회차 가드 저장 실패 — 예약 자동구매를 중단했음을 경고(F3).
                     if (!state.guardSaved) {

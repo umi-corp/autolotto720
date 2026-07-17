@@ -135,6 +135,34 @@ class PurchaseService720Test {
         assertEquals(0, connProCount) // 결제 단계 미도달
     }
 
+    @Test
+    fun `second game failure keeps first ticket as partial success`() = runBlocking {
+        var connProCount = 0
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(req: RecordedRequest): MockResponse = when {
+                req.path?.startsWith("/game/TotalGame.jsp") == true -> MockResponse().setBody("ok")
+                req.path == "/game/pension720/game.jsp" ->
+                    MockResponse().setBody("ok").addHeader("Set-Cookie", "JSESSIONID=$jses; Path=/")
+                req.path == "/makeAutoNo.do" ->
+                    enc("""{"resultCode":"100","selClsNo":"1","selLotNo":"574067","round":"325"}""")
+                req.path == "/makeOrderNo.do" ->
+                    enc("""{"resultCode":"100","orderNo":"1","orderDate":"2026-07-16 23:03:23"}""")
+                req.path == "/connPro.do" -> {
+                    connProCount++
+                    if (connProCount == 1) enc(prchsInfo("574067", 1))
+                    else enc("""{"resultCode":"E110","resultMsg":"구매 한도 초과"}""")   // 한도 소진(실측 시나리오)
+                }
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val result = service().purchase(5)
+        assertEquals(1, result.tickets.size)                     // 성공분 보존
+        assertEquals(1000, result.amount)
+        assertEquals(4, result.partialFailure?.failedGames)     // 실패 게임 + 미시도 잔여
+        assertTrue(result.partialFailure?.cause is DhlotteryException)
+        assertEquals(2, connProCount)                            // 실패 후 잔여 게임 미진행(추가 결제 없음)
+    }
+
     private fun cfg(vararg slots: Slot720, fallback: FallbackPolicy = FallbackPolicy.REASSIGN_ALL) =
         NumberConfig720(
             (slots.toList() + List(5) { Slot720.Unset }).take(5),

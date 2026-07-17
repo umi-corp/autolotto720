@@ -12,6 +12,7 @@ import java.net.URLEncoder
 import java.time.Clock
 import java.time.LocalDateTime
 import java.time.ZonedDateTime
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * 연금복권720+ 온라인 구매 서비스 (el.dhlottery.co.kr + pension.js AES 서브시스템).
@@ -91,9 +92,21 @@ class PurchaseService720(
             val round = Round720.getUpcomingDrawRound(ZonedDateTime.now(clock))
             // GIVE_UP 폴백으로 스킵된 게임은 null → 제외. connPro 성공이 다음 게임의 "구매 진행중" 락을 해제.
             // 전부 스킵돼 빈 결과가 나올 수 있음(지정번호 점유 + 구매 포기) — 이는 오류가 아니라 정책상 정상 결과.
-            // (게임 도중 connPro 오류는 purchaseOneGame이 예외로 던져 여기 도달하지 않는다.)
-            val tickets = specs.mapNotNull { purchaseOneGame(round, it, userId, fallback) }
-            return PurchaseResult720(round, tickets, tickets.size * UNIT_PRICE)
+            // 게임 도중 오류(한도 초과 등): 이미 결제된 게임이 있으면 버리지 않고 남은 게임을 중단, 부분 성공으로
+            // 반환한다 — 호출자가 회차 가드를 기록해야 재실행 중복결제를 막는다. 한 게임도 못 샀으면 전체 실패(throw).
+            val tickets = mutableListOf<Ticket720>()
+            var failure: PartialFailure? = null
+            for ((i, spec) in specs.withIndex()) {
+                val ticket = try {
+                    purchaseOneGame(round, spec, userId, fallback)
+                } catch (e: Exception) {
+                    if (e is CancellationException || tickets.isEmpty()) throw e
+                    failure = PartialFailure(failedGames = specs.size - i, cause = e)
+                    break
+                }
+                if (ticket != null) tickets += ticket
+            }
+            return PurchaseResult720(round, tickets, tickets.size * UNIT_PRICE, failure)
         } finally {
             session.cookies.unfreeze("JSESSIONID")
         }
@@ -280,5 +293,13 @@ class PurchaseService720(
     }
 }
 
-/** 720 구매 결과. */
-data class PurchaseResult720(val round: Int, val tickets: List<Ticket720>, val amount: Int)
+/** 720 구매 결과. [partialFailure]가 있으면 다게임 구매가 도중에 끊긴 부분 성공 — [tickets]는 실제 결제분만. */
+data class PurchaseResult720(
+    val round: Int,
+    val tickets: List<Ticket720>,
+    val amount: Int,
+    val partialFailure: PartialFailure? = null,
+)
+
+/** 다게임 구매 중단 — [failedGames]=결제되지 않은 게임 수(실패 게임 + 미시도 잔여), [cause]=첫 실패 원인. */
+data class PartialFailure(val failedGames: Int, val cause: Exception)

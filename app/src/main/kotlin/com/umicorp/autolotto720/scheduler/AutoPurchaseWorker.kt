@@ -179,10 +179,12 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 )
             } else {
                 val ticketLines = result.tickets.joinToString("\n") { "${it.jo}조 ${it.number}" }
+                val partialLine = result.partialFailure
+                    ?.let { "\n⚠️ 나머지 ${it.failedGames}게임은 구매되지 않았습니다. 내역을 확인해주세요." } ?: ""
                 Notifications.show(
                     ctx,
                     "🎰 AutoLotto720 자동 구매 완료!",
-                    "제 ${result.round}회 · ${result.tickets.size}게임\n$ticketLines",
+                    "제 ${result.round}회 · ${result.tickets.size}게임\n$ticketLines$partialLine",
                     1,
                     tab = Notifications.TAB_HISTORY,
                 )
