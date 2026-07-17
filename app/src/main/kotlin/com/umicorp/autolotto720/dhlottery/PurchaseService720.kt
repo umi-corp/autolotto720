@@ -169,8 +169,7 @@ class PurchaseService720(
         // connPro 응답의 모든 비-SUCCESS 코드는 결과 불명(재시도 금지). 명시 무결제 거절 화이트리스트는
         // 실측(Task 8) 전까지 두지 않는다 — 근거 없는 "재시도 안전" 분류가 곧 이중결제 창이므로 최대 보수.
         if (code !in SUCCESS_CODES) throw DhlotteryException(rejectionMessage(code, r3))
-        val tickets = parseSetTickets(r3, round, number)
-        if (tickets.isEmpty()) throw DhlotteryException("세트 구매 결과 불명 — 내역으로 대조하세요")
+        val tickets = parseSetTickets(r3, round, number)   // 형식 이상/0행이면 여기서 "결과 불명" throw
         val failure = if (tickets.size < 5)
             PartialFailure(failedGames = 5 - tickets.size, cause = DhlotteryException("세트 부분완료 — 결과 불명분은 내역으로 대조하세요"))
         else null
@@ -179,19 +178,26 @@ class PurchaseService720(
 
     /**
      * prchsLtNoInfoLstCn 다중 행(세미콜론/개행 구분) → 티켓. 각 행 "번호|주문|일련|회차|조".
-     * 요청 번호([reqNumber]) 일치·조 1..5 범위·조 유일성·최대 5행을 검증해 서버 오응답을 티켓으로 삼지 않는다.
+     * 형식이상(요청번호[reqNumber] 불일치·조 1..5 범위밖·조 중복·6행+)은 **조용히 버리지 않고** "결과 불명"으로
+     * throw한다 — 서버가 code=100이어도 응답 행이 이상하면 파싱 전체를 신뢰할 수 없으므로 통째 불명 처리(회차
+     * 가드가 Unknown에도 커밋돼 이중결제를 막는다). "정상 행 N개(1≤N<5)"는 부분 성공, "형식 이상"은 불명 throw로 구분.
      */
     private fun parseSetTickets(r3: JSONObject, round: Int, reqNumber: String): List<Ticket720> {
         val raw = r3.optJSONObject("data")?.optString("prchsLtNoInfoLstCn").orEmpty()
         val rows = raw.split(";", "\n").filter { it.isNotBlank() }
-        if (rows.size > 5) throw DhlotteryException("세트 응답 이상(${rows.size}행) — 결과 불명, 내역으로 대조하세요")  // 6행+는 조용히 버리지 않음
+        if (rows.size > 5) throw DhlotteryException("세트 응답 이상(${rows.size}행) — 결과 불명, 내역으로 대조하세요")
         val seenJo = mutableSetOf<Int>()
-        return rows.mapNotNull { row ->
+        val tickets = rows.map { row ->
             val f = row.split("|")
-            val no = f.getOrNull(0)?.takeIf { it == reqNumber } ?: return@mapNotNull null   // 발권번호=요청번호
-            val jo = f.getOrNull(4)?.toIntOrNull()?.takeIf { it in 1..5 && seenJo.add(it) } ?: return@mapNotNull null
+            val no = f.getOrNull(0)
+            val jo = f.getOrNull(4)?.toIntOrNull()
+            if (no != reqNumber || jo == null || jo !in 1..5 || !seenJo.add(jo)) {
+                throw DhlotteryException("세트 응답 형식 이상 — 결과 불명, 내역으로 대조하세요")
+            }
             Ticket720(round = round, jo = jo, number = no, purchaseDate = LocalDateTime.now(clock))
         }
+        if (tickets.isEmpty()) throw DhlotteryException("세트 구매 결과 불명 — 내역으로 대조하세요")
+        return tickets
     }
 
     /** 모든 비-SUCCESS 코드에 "결과 불명" 마커를 심는다(서버 msg 유무와 무관) → classifyPurchaseFailure=Unknown. */

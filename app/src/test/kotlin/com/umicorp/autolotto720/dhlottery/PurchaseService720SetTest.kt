@@ -141,6 +141,52 @@ class PurchaseService720SetTest {
         assertTrue(com.umicorp.autolotto720.isUnknownResultMessage(ex?.message))   // 마커 필수
     }
 
+    @Test fun `set six rows throws unknown (not silently dropped)`() = runBlocking {
+        // 6행+는 응답 신뢰 불가 → 조용히 버리지 않고 결과 불명 throw.
+        server.dispatcher = setRawInfoDispatcher((1..6).joinToString(";") { "574067|2026|100$it|325|$it" })
+        val ex = runCatching { service().purchase(setConfig(), theRound()) }.exceptionOrNull()
+        assertTrue(ex is DhlotteryException)
+        assertTrue(com.umicorp.autolotto720.isUnknownResultMessage(ex?.message))
+    }
+
+    @Test fun `set duplicate jo row throws unknown (not partial)`() = runBlocking {
+        // 조 [1,2,3,4,4] — 중복 조는 형식 이상 → 부분 성공 아니라 결과 불명 throw.
+        val info = listOf(1, 2, 3, 4, 4).joinToString(";") { "574067|2026|100$it|325|$it" }
+        server.dispatcher = setRawInfoDispatcher(info)
+        val ex = runCatching { service().purchase(setConfig(), theRound()) }.exceptionOrNull()
+        assertTrue(ex is DhlotteryException)
+        assertTrue(com.umicorp.autolotto720.isUnknownResultMessage(ex?.message))
+    }
+
+    @Test fun `set mismatched request number row throws unknown`() = runBlocking {
+        // 배정 번호는 574067인데 한 행이 다른 번호(999999) → 요청번호 불일치 → 결과 불명 throw.
+        val info = (1..5).joinToString(";") { i ->
+            val no = if (i == 3) "999999" else "574067"
+            "$no|2026|100$i|325|$i"
+        }
+        server.dispatcher = setRawInfoDispatcher(info)
+        val ex = runCatching { service().purchase(setConfig(), theRound()) }.exceptionOrNull()
+        assertTrue(ex is DhlotteryException)
+        assertTrue(com.umicorp.autolotto720.isUnknownResultMessage(ex?.message))
+    }
+
+    // connPro가 code=100 + 임의의 prchsLtNoInfoLstCn 원문을 반환하는 세트 디스패처(이상 행 주입용).
+    private fun setRawInfoDispatcher(info: String) = object : Dispatcher() {
+        override fun dispatch(req: RecordedRequest): MockResponse = when {
+            req.path?.startsWith("/game/TotalGame.jsp") == true -> MockResponse().setBody("ok")
+            req.path == "/game/pension720/game.jsp" ->
+                MockResponse().setBody("""<input name="USER_ID" value="t"/>""")
+                    .addHeader("Set-Cookie", "JSESSIONID=$jses; Path=/")
+            req.path == "/makeAutoNo.do" ->
+                enc("""{"resultCode":"100","selClsNo":"1,2,3,4,5","selLotNo":"574067","round":"325"}""")
+            req.path == "/makeOrderNo.do" ->
+                enc("""{"resultCode":"100","orderNo":"1","orderDate":"2026-07-16 23:03:23"}""")
+            req.path == "/connPro.do" ->
+                enc("""{"resultCode":"100","data":{"prchsLtNoInfoLstCn":"$info"}}""")
+            else -> MockResponse().setResponseCode(404)
+        }
+    }
+
     // rows개 행을 code와 함께 반환하는 세트 디스패처.
     private fun setDispatcher(rows: Int, code: String) = object : Dispatcher() {
         override fun dispatch(req: RecordedRequest): MockResponse = when {
