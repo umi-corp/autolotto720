@@ -73,7 +73,7 @@ class AppContainer(context: Context) {
     private val _numberConfig = MutableStateFlow(NumberConfig720.empty())
     val numberConfig: StateFlow<NumberConfig720> = _numberConfig.asStateFlow()
 
-    private val _autoPurchaseDay = MutableStateFlow(4)     // 기본 목요일(720 추첨일) — SecureStore 기본값과 동일
+    private val _autoPurchaseDay = MutableStateFlow(5)     // 기본 금요일(판매개시 다음날, 지정번호 선점 최적) — SecureStore 기본값과 동일
     val autoPurchaseDay: StateFlow<Int> = _autoPurchaseDay.asStateFlow()
 
     private val _autoPurchaseHour = MutableStateFlow(9)
@@ -196,6 +196,15 @@ class AppContainer(context: Context) {
         }
     }
 
+    /**
+     * [DEBUG 전용] 자동구매 회차 멱등 가드([AutoPurchaseWorker.isRoundAlreadyPurchased]) 리셋.
+     * 같은 회차를 예약 워커로 다시 구매하는 테스트용 — 0(=미구매)으로 되돌린다. 프로덕션 경로엔 노출 안 됨.
+     */
+    fun debugResetPurchasedRound(): String {
+        store.setLastPurchasedRound(0)
+        return "회차기록 리셋됨 — 다음 예약 워커 실행 시 이번 회차를 실제 구매합니다"
+    }
+
     /** 잔액 재조회 + 잔액부족 체크(원본 home/_refreshBalance). */
     suspend fun refreshBalance() {
         val b = auth.getBalance()
@@ -297,7 +306,7 @@ class AppContainer(context: Context) {
         _autoEnabled.value = false
         _autoGames.value = 0
         _numberConfig.value = NumberConfig720.empty()
-        _autoPurchaseDay.value = 4
+        _autoPurchaseDay.value = 5
         _autoPurchaseHour.value = 9
         _autoPurchaseMinute.value = 0
         _balanceAlertEnabled.value = false

@@ -215,6 +215,11 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch { onResult(container.debugPurchaseOne()) }
     }
 
+    /** [DEBUG 전용] 자동구매 회차 멱등 가드 리셋 → 예약 워커 재구매 테스트용. */
+    fun debugResetRound(onResult: (String) -> Unit) {
+        onResult(container.debugResetPurchasedRound())
+    }
+
     fun setAutoEnabled(v: Boolean) { viewModelScope.launch { container.setAutoEnabled(v) } }
 
     /** 요일 변경. 저장된 시:분과 조합한 후보가 구매 불가 시간이면 false 반환(원본 검증 스낵바). */

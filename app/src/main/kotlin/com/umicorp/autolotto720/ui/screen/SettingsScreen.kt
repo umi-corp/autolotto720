@@ -438,7 +438,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
                     colors = transparentListColors(),
                     leadingContent = { SettingIcon(Icons.Rounded.Code, LgInk) },
                     headlineContent = { Text(stringResource(R.string.settingOpenSource), fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text("github.com/umi-corp/autolotto") },
+                    supportingContent = { Text("github.com/umi-corp/autolotto720") },
                     trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 )
                 HorizontalDivider()
@@ -479,6 +479,15 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
                                 else "감독 하 실구매 — 번호 탭 설정대로(없으면 반자동 1매)",
                             )
                         },
+                    )
+                    ListItem(
+                        modifier = Modifier.clickable {
+                            vm.debugResetRound { result -> scope.launch { snackbar.showSnackbar(result) } }
+                        },
+                        colors = transparentListColors(),
+                        leadingContent = { SettingIcon(Icons.Rounded.Refresh, LgAmber) },
+                        headlineContent = { Text("회차기록 리셋 (예약 재테스트)", fontWeight = FontWeight.Bold) },
+                        supportingContent = { Text("멱등 가드 해제 — 다음 예약 워커가 이번 회차를 실구매") },
                     )
                 }
             }
@@ -815,5 +824,5 @@ private const val THURSDAY = 4
 private const val SALES_CLOSE_HOUR = 17
 
 private const val URL_CHARGE = "https://www.dhlottery.co.kr/mypage/mndpChrg"
-private const val URL_OPENSOURCE = "https://github.com/umi-corp/autolotto"
+private const val URL_OPENSOURCE = "https://github.com/umi-corp/autolotto720"
 private const val URL_DONATION = "https://buymeacoffee.com/umicorp"
