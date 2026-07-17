@@ -61,27 +61,27 @@ object Round720 {
         return FIRST_ROUND.plusWeeks((round - 1).toLong())
     }
 
-    /** 판매마감 시각(목 17:00). 이후 19:05 추첨까지가 판매정지 창. */
+    /** 판매정지 창(목 17:00~22:00): 판매마감(17:00)→추첨(19:05)→정산 후 22:00 재개. 이 창엔 온라인 구매 불가. */
     private val SALES_CLOSE: LocalTime = LocalTime.of(17, 0)
+    private val SALES_REOPEN: LocalTime = LocalTime.of(22, 0)
 
     /**
-     * 판매마감 가드(720 규칙): 다가오는 회차의 추첨일이 오늘(KST)이고 17:00 이후면 true(마감).
-     * 목 19:05 추첨 후엔 다가오는 회차가 다음 주로 롤오버되므로(추첨일≠오늘) false로 다시 열린다.
-     * AutoPurchaseWorker(구매 가드)와 PurchaseSetup/Settings VM(입력 검증) 양쪽이 이 단일 판정을 공유해
-     * 드리프트를 막는다(645 토요일 규칙 잔재 제거).
+     * 판매정지 가드(720 규칙): 목요일 17:00~22:00(KST)이면 true(정지). 그 외 시각·요일은 판매 중.
+     * dhlottery 온라인 판매가 목 17:00 마감 후 추첨·정산을 거쳐 22:00에 재개되는 창을 그대로 막는다.
+     * AutoPurchaseWorker(구매 가드)와 PurchaseSetup/Settings VM(입력 검증) 양쪽이 이 창을 공유해 드리프트를 막는다.
      */
     internal fun isSalesClosed(now: ZonedDateTime = ZonedDateTime.now(KST)): Boolean {
         val kstNow = now.withZoneSameInstant(KST)   // 입력 존 무관 KST 정규화(R1 F14)
-        return getDrawDate(getUpcomingDrawRound(kstNow)) == kstNow.toLocalDate() && kstNow.toLocalTime() >= SALES_CLOSE
+        if (kstNow.dayOfWeek.value != THURSDAY) return false
+        val t = kstNow.toLocalTime()
+        return t >= SALES_CLOSE && t < SALES_REOPEN
     }
 
     /**
-     * 후보 스케줄(요일,시,분)이 설정 금지 창에 드는지 판정 — 벽시계 기준 순수 함수.
-     * 규칙: 목 17:00~23:59 금지(금 00:00부터 다음 회차 판매 개시라 허용). 현 회차는 목 17:00 마감이라
-     * 목 17:00 이후를 스케줄 대상으로 두면 이번 목요일 저녁 내내 무구매가 되므로 저장 시점에 막는다.
-     * `isSalesClosed`(런타임 "지금" 판정)와 독립 — 이건 저장하려는 후보만 검증한다(R2 N1).
-     * minute는 API 호환용(현 규칙은 시 단위 경계).
+     * 후보 스케줄(요일,시,분)이 판매정지 창에 드는지 판정 — 벽시계 기준 순수 함수.
+     * 규칙: 목 17:00~22:00 금지(22:00 재개부터 허용). 이 창을 스케줄 대상으로 두면 그 주 무구매가 되므로 저장 시점에 막는다.
+     * [isSalesClosed]와 동일 창을 공유(런타임 "지금" vs 저장 후보 검증만 다름). minute는 API 호환용(현 규칙은 시 단위 경계).
      */
     fun isScheduleBlocked(day: Int, hour: Int, minute: Int): Boolean =
-        day == THURSDAY && hour >= SALES_CLOSE.hour
+        day == THURSDAY && hour >= SALES_CLOSE.hour && hour < SALES_REOPEN.hour
 }

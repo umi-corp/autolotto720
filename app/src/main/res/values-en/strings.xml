@@ -141,7 +141,7 @@
     <string name="hintSetupGamesInNumberTab">Set ticket count in Purchase tab</string>
     <string name="settingPurchaseDay">Purchase Day</string>
     <string name="settingPurchaseTime">Purchase Time</string>
-    <string name="warningSalesClosedAfter">Thu 17:00–Fri 00:00 cannot be scheduled — sales are closed</string>
+    <string name="warningSalesClosedAfter">Thu 17:00–22:00 cannot be scheduled — sales are paused</string>
     <string name="settingBatteryOptimization">Disable Battery Optimization</string>
     <string name="hintBatteryOptimization">Recommended for on-time execution</string>
 
@@ -157,7 +157,7 @@
     <string name="buttonReset2">Reset</string>
 
     <string name="errorInvalidPurchaseTime">Current time is not valid for the selected day. Please change the time first.</string>
-    <string name="errorPurchaseTimeRestriction">Cannot purchase at this time.\nThu 17:00–Fri 00:00 sales are closed</string>
+    <string name="errorPurchaseTimeRestriction">Cannot purchase at this time.\nThu 17:00–22:00 sales are paused</string>
     <string name="snackbarBatteryAlreadyExcluded">✅ Already excluded from battery optimization</string>
     <string name="snackbarBatteryManualDisable">Please disable battery optimization in app settings</string>
     <string name="errorBatterySettings">Cannot open battery settings: %1$s</string>
@@ -227,13 +227,15 @@
     <string name="instantConfirmTitle">Instant Purchase</string>
     <string name="instantConfirmBody">Round %1$d · %2$d game(s) · ₩%3$s\nBuy now?</string>
     <string name="extraPickTitle">Buy More (Auto)</string>
+    <string name="extraPickSetTitle">Buy More (All-groups set)</string>
     <string name="extraPickBody">Choose how many auto games (group and number both auto) to buy. Requests over the weekly limit (5 games) are rejected by the server.</string>
     <string name="instantInProgress">Purchasing…</string>
     <string name="instantSuccessTitle">🎰 Purchase Complete!</string>
     <string name="instantSuccessBody">Round %1$d · %2$d game(s)</string>
     <string name="instantNoTickets">Your chosen numbers were already sold, so nothing was bought under the \'give up\' policy.</string>
     <string name="instantErrorTitle">Purchase Failed</string>
-    <string name="instantUnknownResult">Your purchase may have gone through.\nCheck the History tab before trying again.</string>
+    <string name="instantUnknownTitle">Purchase result needs checking</string>
+    <string name="instantUnknownResult">The lottery server didn\'t return a purchase result (not an app error).\nIt may have gone through — check the History tab before trying again.</string>
     <string name="instantAlreadyPurchased">This round was just purchased. Use Buy More instead.</string>
     <string name="instantRoundChanged">The round has changed, so the purchase was cancelled. Please review again.</string>
     <string name="instantErrorFallback">Purchase failed. Please try again.</string>

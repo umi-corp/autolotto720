@@ -1,5 +1,8 @@
 package com.umicorp.autolotto720
 
+import com.umicorp.autolotto720.data.FallbackPolicy
+import com.umicorp.autolotto720.data.NumberConfig720
+import com.umicorp.autolotto720.data.Slot720
 import com.umicorp.autolotto720.dhlottery.DhlotteryException
 import com.umicorp.autolotto720.ui.vm.SettingsViewModel
 import org.junit.Assert.assertEquals
@@ -18,10 +21,12 @@ import java.io.IOException
 class InstantPurchaseLogicTest {
 
     @Test
-    fun `판매시간 게이트 - 목요일은 16시대까지, 17시부터 판매 금지`() {
+    fun `판매시간 게이트 - 목 17시부터 판매 금지, 22시에 재개`() {
         assertTrue(SettingsViewModel.isValidPurchaseTime(day = 4, hour = 16, minute = 59))
         assertFalse(SettingsViewModel.isValidPurchaseTime(day = 4, hour = 17, minute = 0))
-        assertFalse(SettingsViewModel.isValidPurchaseTime(day = 4, hour = 23, minute = 59))
+        assertFalse(SettingsViewModel.isValidPurchaseTime(day = 4, hour = 21, minute = 59))  // 정지창 끝자락
+        assertTrue(SettingsViewModel.isValidPurchaseTime(day = 4, hour = 22, minute = 0))    // 22:00 재개
+        assertTrue(SettingsViewModel.isValidPurchaseTime(day = 4, hour = 23, minute = 59))   // 재개 후 허용
     }
 
     @Test
@@ -104,6 +109,50 @@ class InstantPurchaseLogicTest {
     @Test
     fun `classifyPurchaseFailure - 표식 없는 Dhlottery 예외는 서버 확정 거절(Rejected)`() {
         assertTrue(classifyPurchaseFailure(DhlotteryException("구매 실패(code=300): 예치금이 부족합니다")) is PurchaseFailure.Rejected)
+    }
+
+    // === extraAttemptAmount: 추가 구매 시도 금액(순수, 예산 가드 입력) ===
+
+    @Test
+    fun `extraAttemptAmount - 모든조 세트는 게임수와 무관하게 5,000원`() {
+        assertEquals(5000, extraAttemptAmount(extraSet = true, autoGames = 0))
+        assertEquals(5000, extraAttemptAmount(extraSet = true, autoGames = 3))
+    }
+
+    @Test
+    fun `extraAttemptAmount - 완전자동은 게임수 x 1,000원`() {
+        assertEquals(1000, extraAttemptAmount(extraSet = false, autoGames = 1))
+        assertEquals(5000, extraAttemptAmount(extraSet = false, autoGames = 5))
+    }
+
+    // === isLegacyAutoMigrationArtifact: 구 매수-마이그레이션 산출물만 정리, 세트 설정은 보존(순수) ===
+
+    private fun cfg(setMode: Boolean, revision: Long, slots: List<Slot720> = List(5) { Slot720.Unset }) =
+        NumberConfig720(slots, FallbackPolicy.REASSIGN_ALL, if (setMode) 2 else 1, revision, setMode)
+
+    @Test
+    fun `legacy artifact - rev1 빈슬롯 비세트는 정리 대상`() {
+        assertTrue(isLegacyAutoMigrationArtifact(cfg(setMode = false, revision = 1L)))
+    }
+
+    @Test
+    fun `legacy artifact - rev1 세트 모드는 정리 대상 아님(세트 보존)`() {
+        // 세트를 첫 저장하면 rev=1·빈 슬롯이 되지만, 앱 재시작 시 초기화되면 안 된다(사용자 보고 버그).
+        assertFalse(isLegacyAutoMigrationArtifact(cfg(setMode = true, revision = 1L)))
+    }
+
+    @Test
+    fun `legacy artifact - rev2 이상은 정리 대상 아님`() {
+        assertFalse(isLegacyAutoMigrationArtifact(cfg(setMode = false, revision = 2L)))
+    }
+
+    @Test
+    fun `legacy artifact - 수동 슬롯이 있으면 실제 사용자 저장(정리 안 함)`() {
+        val slots = listOf(
+            Slot720.Manual(1, listOf(1, 2, 3, 4, 5, 6)),
+            Slot720.Unset, Slot720.Unset, Slot720.Unset, Slot720.Unset,
+        )
+        assertFalse(isLegacyAutoMigrationArtifact(cfg(setMode = false, revision = 1L, slots = slots)))
     }
 
     // === accountScopedRound: 계정 스코프 회차 가드(순수, F4) ===

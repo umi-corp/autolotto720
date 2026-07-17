@@ -1198,7 +1198,20 @@ private fun InstantPurchaseDialogs(state: InstantState, vm: PurchaseSetupViewMod
                 TextButton(onClick = { vm.dismissInstant() }) { Text(stringResource(R.string.buttonCancel)) }
             },
         )
-        is InstantState.PickingExtra -> {
+        is InstantState.PickingExtra -> if (state.setMode) {
+            // 저장 설정이 세트 모드 → 추가도 모든조 세트(₩5,000, 새 자동번호 5매). 게임수 선택 없음.
+            AlertDialog(
+                onDismissRequest = { vm.dismissInstant() },
+                title = { Text(stringResource(R.string.extraPickSetTitle)) },
+                text = { Text(stringResource(R.string.setModeConfirm, state.round)) },
+                confirmButton = {
+                    TextButton(onClick = { vm.confirmExtraSet() }) { Text(stringResource(R.string.buttonConfirm)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { vm.dismissInstant() }) { Text(stringResource(R.string.buttonCancel)) }
+                },
+            )
+        } else {
             var games by rememberSaveable { mutableIntStateOf(1) }   // 회전 시 선택 게임수 유지(F10)
             AlertDialog(
                 onDismissRequest = { vm.dismissInstant() },
@@ -1310,7 +1323,8 @@ private fun InstantPurchaseDialogs(state: InstantState, vm: PurchaseSetupViewMod
             onDismiss = { vm.dismissInstant() },
         )
         is InstantState.Error -> InstantNoticeDialog(
-            title = stringResource(R.string.instantErrorTitle),
+            // 결과 불명은 앱 실패가 아니라 서버 응답 미확인 — 제목도 "구매 실패"가 아닌 "확인 필요"로 구분(동행복권측 이슈 인지).
+            title = stringResource(if (state.unknown) R.string.instantUnknownTitle else R.string.instantErrorTitle),
             text = if (state.unknown) stringResource(R.string.instantUnknownResult)
             else state.message ?: stringResource(R.string.instantErrorFallback),
             onDismiss = { vm.dismissInstant() },

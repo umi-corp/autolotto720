@@ -141,7 +141,7 @@
     <string name="hintSetupGamesInNumberTab">購入タブで口数を設定してください</string>
     <string name="settingPurchaseDay">購入曜日</string>
     <string name="settingPurchaseTime">購入時間</string>
-    <string name="warningSalesClosedAfter">木17:00〜金00:00は設定不可 — 販売終了時間帯</string>
+    <string name="warningSalesClosedAfter">木17:00〜22:00は設定不可 — 販売停止時間帯</string>
     <string name="settingBatteryOptimization">バッテリー最適化を除外</string>
     <string name="hintBatteryOptimization">定時実行のため推奨</string>
 
@@ -157,7 +157,7 @@
     <string name="buttonReset2">初期化</string>
 
     <string name="errorInvalidPurchaseTime">現在の設定時間ではこの曜日に購入できません。先に時間を変更してください。</string>
-    <string name="errorPurchaseTimeRestriction">この時間帯は購入できません。\n木17:00〜金00:00は販売終了時間帯です</string>
+    <string name="errorPurchaseTimeRestriction">この時間帯は購入できません。\n木17:00〜22:00は販売停止時間帯です</string>
     <string name="snackbarBatteryAlreadyExcluded">✅ すでにバッテリー最適化から除外されています</string>
     <string name="snackbarBatteryManualDisable">アプリ設定でバッテリー最適化を手動で解除してください</string>
     <string name="errorBatterySettings">バッテリー設定を開けません: %1$s</string>
@@ -227,13 +227,15 @@
     <string name="instantConfirmTitle">即時購入</string>
     <string name="instantConfirmBody">第%1$d回 · %2$dゲーム · ₩%3$s\n今すぐ購入しますか?</string>
     <string name="extraPickTitle">追加購入 (自動)</string>
+    <string name="extraPickSetTitle">追加購入 (全組セット)</string>
     <string name="extraPickBody">自動(組·番号とも自動)のゲーム数を選択してください。週間上限(5ゲーム)を超えるとサーバーで拒否されます。</string>
     <string name="instantInProgress">購入中…</string>
     <string name="instantSuccessTitle">🎰 購入完了!</string>
     <string name="instantSuccessBody">第%1$d回 · %2$dゲーム</string>
     <string name="instantNoTickets">指定した番号がすでに販売済みのため、\'購入見送り\'ポリシーにより購入しませんでした。</string>
     <string name="instantErrorTitle">購入失敗</string>
-    <string name="instantUnknownResult">購入が受け付けられた可能性があります。\n履歴タブで確認してから再試行してください。</string>
+    <string name="instantUnknownTitle">購入結果の確認が必要</string>
+    <string name="instantUnknownResult">宝くじサーバーから購入結果の応答がありませんでした（アプリの不具合ではありません）。\n受け付けられた可能性があるため、履歴タブで確認してから再試行してください。</string>
     <string name="instantAlreadyPurchased">この回はたった今購入されました。追加購入をご利用ください。</string>
     <string name="instantRoundChanged">回が変わったため購入をキャンセルしました。もう一度ご確認ください。</string>
     <string name="instantErrorFallback">購入に失敗しました。もう一度お試しください。</string>

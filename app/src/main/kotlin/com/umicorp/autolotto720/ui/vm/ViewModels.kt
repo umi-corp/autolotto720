@@ -123,7 +123,8 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
         data class ConfirmingFirst(val round: Int, val config: NumberConfig720) : InstantState {
             val games: Int get() = config.gameCount
         }
-        data class PickingExtra(val round: Int) : InstantState
+        /** [setMode]=저장 설정이 세트 모드면 추가도 모든조 세트, 아니면 완전자동 게임수 선택. */
+        data class PickingExtra(val round: Int, val setMode: Boolean) : InstantState
         data object InProgress : InstantState
         data object AlreadyPurchased : InstantState   // 첫 구매 확정 직전 워커 선점
         data object SaleClosed : InstantState         // 탭·확정 시점 판매시간 재검증 실패
@@ -163,7 +164,7 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
                 .onFailure { if (it is CancellationException) throw it }
             val round = Round720.getUpcomingDrawRound()
             if (container.lastPurchasedRound.value >= round) {
-                advanceFromIdle(InstantState.PickingExtra(round))
+                advanceFromIdle(InstantState.PickingExtra(round, container.numberConfig.value.setMode))
                 return@launch
             }
             val saved = container.numberConfig.value
@@ -195,7 +196,15 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
     fun confirmExtra(games: Int) {
         val s = _instantState.value as? InstantState.PickingExtra ?: return
         launchPurchase {
-            container.instantPurchase(extra = true, expectedRound = s.round, autoGames = games, config = null)
+            container.instantPurchase(extra = true, expectedRound = s.round, autoGames = games, config = null, extraSet = false)
+        }
+    }
+
+    /** 추가 구매 확정 — 모든조 세트(5조 동일 새 자동번호 1매씩, ₩5,000). 저장 세트 모드일 때만 노출. */
+    fun confirmExtraSet() {
+        val s = _instantState.value as? InstantState.PickingExtra ?: return
+        launchPurchase {
+            container.instantPurchase(extra = true, expectedRound = s.round, autoGames = 0, config = null, extraSet = true)
         }
     }
 

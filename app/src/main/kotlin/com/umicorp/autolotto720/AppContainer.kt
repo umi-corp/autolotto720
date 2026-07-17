@@ -284,15 +284,17 @@ class AppContainer(context: Context) {
      * 즉시 구매. [expectedRound]는 확정 다이얼로그가 표시한 회차 — Mutex 안에서 현재 회차와 대조해
      * 다르면 [RoundChangedException](구매 요청 없음, 표시≠결제 방지). [extra]=false(첫 구매:
      * 저장된 [config] 슬롯 그대로 — 조/번호 지정 포함)는 회차 가드 재판정 후 이미 구매된 회차면
-     * null(= "방금 구매됨"), [extra]=true(추가: 완전자동 [autoGames]게임)는 가드로 막지 않는다
-     * (서버 주간한도가 방어선). 세션 만료 대비 매번 재로그인(워커 패턴). 성공 응답 관측 즉시 성공 확정 —
-     * 회차+계정 기록 실패가 성공 결과를 가리면 재시도를 오유도하므로 runCatching. 잔액 갱신은 락 밖(실패 무시).
+     * null(= "방금 구매됨"), [extra]=true(추가)는 가드로 막지 않는다(서버 주간한도가 방어선). 추가 구매는
+     * [extraSet]=true면 모든조 세트(₩5,000, 새 자동번호), false면 완전자동 [autoGames]게임 — 둘 다 저장
+     * 수동번호를 재사용하지 않아 첫 구매와 중복되지 않는다. 세션 만료 대비 매번 재로그인(워커 패턴). 성공 응답
+     * 관측 즉시 성공 확정 — 회차+계정 기록 실패가 성공 결과를 가리면 재시도를 오유도하므로 runCatching. 잔액 갱신은 락 밖(실패 무시).
      */
     suspend fun instantPurchase(
         extra: Boolean,
         expectedRound: Int,
         autoGames: Int,
         config: NumberConfig720?,
+        extraSet: Boolean = false,
     ): PurchaseResult720? {
         // 방어적 kill switch — 워커와 대칭(F2). 계약이 깨져 게이트를 내리면 실결제 경로를 CTA 게이트와 이중으로 막는다.
         check(Feature720.PURCHASE_ENABLED) { "instant purchase is gated off" }
@@ -328,7 +330,7 @@ class AppContainer(context: Context) {
             }
 
             // ② 예산 가드 — 결제 진입 전, 미결 PENDING까지 더해 일/회차 한도를 검사(초과 시 미결제·미기록·미커밋).
-            val attempt = if (extra) autoGames * 1000 else attemptAmount(requireNotNull(config) { "구매할 게임 설정이 없습니다." })
+            val attempt = if (extra) extraAttemptAmount(extraSet, autoGames) else attemptAmount(requireNotNull(config) { "구매할 게임 설정이 없습니다." })
             val today = java.time.LocalDate.now(Round720.KST).toEpochDay()
             val ledger = BudgetGuard.parseLedger(store.getSpendLedger())
             if (!BudgetGuard.check(ledger, today, round, attempt, store.getDailyBudget(), store.getWeeklyBudget(), pending)) {
@@ -347,8 +349,14 @@ class AppContainer(context: Context) {
             }
 
             val r = try {
-                // 추가 구매는 조·번호 모두 자동(완전자동) N게임 — 저장된 수동 번호 중복 구매 방지. round 주입(TOCTOU 제거).
-                if (extra) svc.purchase(games = autoGames, round = round) else svc.purchase(cfg!!, round = round)
+                // 추가 구매: 세트면 모든조 세트(SA·새 자동번호 5매), 아니면 완전자동 N게임 — 둘 다 저장 수동번호 미사용(중복 구매 방지).
+                // round 주입(TOCTOU 제거). 세트 config는 setMode만 보므로 빈 config에 플래그만 세운다(purchaseSet은 슬롯 무시).
+                if (extra) {
+                    if (extraSet) svc.purchase(NumberConfig720.empty().copy(setMode = true), round = round)
+                    else svc.purchase(games = autoGames, round = round)
+                } else {
+                    svc.purchase(cfg!!, round = round)
+                }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e             // 취소는 재래핑 금지(구조적 동시성, F1)
                 // 720 서비스는 결과 불명도 DhlotteryException으로 던진다 — 오분류는 중복 결제 위험(F14로 분리).
@@ -417,13 +425,13 @@ class AppContainer(context: Context) {
 
     /**
      * 저장 JSON → 설정. 없으면 빈 설정(초기설정은 게임 없음 — 구 매수 마이그레이션 폐기, 사용자 피드백).
-     * 일회성 정리: rev=1이고 수동/반자동 슬롯이 없는 저장본 = 구버전 "매수→전부자동" 마이그레이션 산출물 →
-     * 빈 설정으로 교체 영속화. 직접 저장본은 rev≥2라 보존된다(수동 저장은 항상 마이그레이션 이후 발생).
+     * 일회성 정리: [isLegacyAutoMigrationArtifact] 산출물만 빈 설정으로 교체 영속화한다. 세트 모드는 제외 —
+     * 세트를 첫 저장하면 rev=1·빈 슬롯이라 예전엔 이 정리에 잘못 걸려 앱 재시작마다 슬롯 모드로 초기화됐다.
      * 손상/미지 스키마는 [NumberConfig720.fromJson]이 안전 기본값으로 떨어뜨린다.
      */
     private fun loadNumberConfig(): NumberConfig720 {
         val saved = NumberConfig720.fromJson(store.getNumberConfig()) ?: return NumberConfig720.empty()
-        if (saved.revision == 1L && saved.slots.none { it is Slot720.SemiAuto || it is Slot720.Manual }) {
+        if (isLegacyAutoMigrationArtifact(saved)) {
             val reset = NumberConfig720.empty().copy(revision = saved.revision + 1)  // 단조 증가 유지
             store.setNumberConfig(reset.toJson())
             return reset
@@ -613,6 +621,19 @@ private const val BUDGET_MAX = 150000
 /** 설정 기준 시도 금액(원) — 세트 5,000, 슬롯 모드 게임수×1,000. */
 fun attemptAmount(config: NumberConfig720): Int =
     if (config.setMode) 5000 else config.gameCount * 1000
+
+/** 추가 구매 시도 금액(원) — 모든조 세트 5,000, 완전자동 게임수×1,000. */
+fun extraAttemptAmount(extraSet: Boolean, autoGames: Int): Int =
+    if (extraSet) 5000 else autoGames * 1000
+
+/**
+ * 구버전 "매수→전부자동" 마이그레이션 산출물 판정(순수) — rev=1이고 수동/반자동 슬롯이 없는 저장본만 정리 대상.
+ * **세트 모드는 제외**: 세트는 조 편집이 없어 빈 슬롯이 정상이고 의도적 사용자 선택(schema v2)이라 레거시 산출물이 아니다.
+ * 이 제외가 없으면 세트를 첫 저장(rev=1)한 사용자의 설정이 loadNumberConfig에서 매번 슬롯 모드로 초기화된다.
+ */
+fun isLegacyAutoMigrationArtifact(config: NumberConfig720): Boolean =
+    config.revision == 1L && !config.setMode &&
+        config.slots.none { it is Slot720.SemiAuto || it is Slot720.Manual }
 
 /** connPro 선기록 JSON {round, epochDay, amount} — check(pending=…)와 동일 필드. */
 private fun pendingJson(round: Int, epochDay: Long, amount: Int): String =

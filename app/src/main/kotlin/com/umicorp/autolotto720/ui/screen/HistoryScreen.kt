@@ -284,23 +284,16 @@ private fun RoundCard(round: Int, tickets: List<Ticket720>, index: Int) {
             }
         }
 
-        // 본문: 게임 A~E 라벨 + 조 + 6자리 번호 (+ 추첨완료 시 맞은 뒤자리 강조·행별 등수 필).
-        // 645 HistoryCard의 게임행(letter + 볼 + 상태필) 대응.
+        // 본문: 조 + 6자리 번호 (+ 추첨완료 시 맞은 뒤자리 강조·행별 등수 필). 티켓은 조 뱃지로 식별되므로
+        // 행 letter 라벨(A~)은 두지 않는다 — 세트(동일번호 5매)·5매 초과분에서 설정 슬롯과 무관해 혼란만 준다.
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            tickets.forEachIndexed { i, t ->
+            tickets.forEach { t ->
                 val drawn = !pendingOf(t)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        ('A' + i).toString(),
-                        modifier = Modifier.width(20.dp),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.ExtraBold,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
                     // 추첨완료면 맞은 뒤 k자리 강조(나머지 흐림); 미추첨이면 균일(-1).
                     JoNumberDisplay(
                         joLabel = localizedJoLabel(t.jo),

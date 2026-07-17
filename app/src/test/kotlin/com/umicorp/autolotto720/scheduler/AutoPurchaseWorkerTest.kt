@@ -26,10 +26,10 @@ class AutoPurchaseWorkerTest {
     private val kst = ZoneId.of("Asia/Seoul")
     private fun at(y: Int, mo: Int, d: Int, h: Int, mi: Int) = ZonedDateTime.of(y, mo, d, h, mi, 0, 0, kst)
 
-    // ---------- 판매마감 가드 (목 17:00→19:05 죽은 창) ----------
+    // ---------- 판매정지 가드 (목 17:00~22:00) ----------
 
     @Test fun `thursday 1659 sales still open`() {
-        val now = at(2026, 7, 16, 16, 59) // Thu, before draw
+        val now = at(2026, 7, 16, 16, 59) // Thu, before close
         assertFalse(AutoPurchaseWorker.isSalesClosed(now))
     }
 
@@ -38,11 +38,15 @@ class AutoPurchaseWorkerTest {
         assertTrue(AutoPurchaseWorker.isSalesClosed(now))
     }
 
-    @Test fun `thursday 1906 after draw rolls to next round so sales open again`() {
-        val now = at(2026, 7, 16, 19, 6) // after 19:05 draw
-        assertFalse(AutoPurchaseWorker.isSalesClosed(now))
+    @Test fun `thursday 1906 still closed until 22h even after draw`() {
+        val now = at(2026, 7, 16, 19, 6) // after 19:05 draw, still in 17~22 stop window
+        assertTrue(AutoPurchaseWorker.isSalesClosed(now))
         val upcoming = Round720.getUpcomingDrawRound(now)
-        assertEquals(LocalDate.of(2026, 7, 23), Round720.getDrawDate(upcoming)) // buys NEXT round
+        assertEquals(LocalDate.of(2026, 7, 23), Round720.getDrawDate(upcoming)) // 회차는 다음 주로 롤오버
+    }
+
+    @Test fun `thursday 2200 sales reopen`() {
+        assertFalse(AutoPurchaseWorker.isSalesClosed(at(2026, 7, 16, 22, 0)))
     }
 
     @Test fun `non-thursday is never sales closed`() {
