@@ -3,6 +3,8 @@ package com.umicorp.autolotto720.ui.vm
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umicorp.autolotto720.AppContainer
+import com.umicorp.autolotto720.BudgetExceededException
+import com.umicorp.autolotto720.R
 import com.umicorp.autolotto720.data.FallbackPolicy
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.Slot720
@@ -88,9 +90,9 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
 
     fun setAutoEnabled(v: Boolean) { viewModelScope.launch { container.setAutoEnabled(v) } }
 
-    /** committed 5슬롯+폴백정책 저장(revision 단조 증가). 구매는 활성화하지 않는다. */
-    fun saveConfig(slots: List<Slot720>, fallback: FallbackPolicy) {
-        viewModelScope.launch { container.saveNumberConfig(slots, fallback) }
+    /** committed 5슬롯+폴백정책+세트모드 저장(revision 단조 증가). 구매는 활성화하지 않는다. */
+    fun saveConfig(slots: List<Slot720>, fallback: FallbackPolicy, setMode: Boolean) {
+        viewModelScope.launch { container.saveNumberConfig(slots, fallback, setMode) }
     }
 
     // === 즉시 구매 (저장 버튼 아래 CTA — 645 docs/DESIGN-instant-purchase.md의 720 포트) ===
@@ -212,6 +214,12 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
                 InstantState.RoundChanged                            // 구매 요청 없이 취소됨
             } catch (e: AppContainer.PurchaseResultUnknownException) {
                 InstantState.Error(message = null, unknown = true)
+            } catch (e: BudgetExceededException) {
+                // 예산 초과는 값(daily/weekly)만 담겨 오므로 여기서 3로케일 리소스로 매핑(재시도 유도 아님).
+                InstantState.Error(
+                    container.appContext.getString(R.string.budgetExceeded, e.daily, e.weekly),
+                    unknown = false,
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e              // 취소는 Error로 오분류하지 않고 전파(F1)
                 InstantState.Error(message = e.message, unknown = false)
@@ -307,6 +315,8 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     val autoPurchaseMinute = container.autoPurchaseMinute
     val balanceAlertEnabled = container.balanceAlertEnabled
     val balanceAlertThreshold = container.balanceAlertThreshold
+    val dailyBudget = container.dailyBudget
+    val weeklyBudget = container.weeklyBudget
     val language = container.language
     val loggedInUserId = container.loggedInUserId
 
@@ -373,6 +383,8 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setLanguage(lang: String) { viewModelScope.launch { container.setLanguage(lang) } }
     fun setBalanceAlertEnabled(v: Boolean) { viewModelScope.launch { container.setBalanceAlertEnabled(v) } }
     fun setBalanceAlertThreshold(v: Int) { viewModelScope.launch { container.setBalanceAlertThreshold(v) } }
+    fun setDailyBudget(v: Int) { viewModelScope.launch { container.setDailyBudget(v) } }
+    fun setWeeklyBudget(v: Int) { viewModelScope.launch { container.setWeeklyBudget(v) } }
     fun resetAll() { viewModelScope.launch { container.resetAll() } }
 
     companion object {

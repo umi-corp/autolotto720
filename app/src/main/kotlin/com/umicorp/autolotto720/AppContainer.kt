@@ -55,7 +55,7 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 class AppContainer(context: Context) {
 
-    private val appContext: Context = context.applicationContext
+    val appContext: Context = context.applicationContext
 
     // === 공유 서비스 ===
     val store = SecureStore(appContext)
@@ -99,6 +99,14 @@ class AppContainer(context: Context) {
     private val _balanceAlertThreshold = MutableStateFlow(5000)
     val balanceAlertThreshold: StateFlow<Int> = _balanceAlertThreshold.asStateFlow()
 
+    // 예산 한도(원) — 즉시/예약 구매 공통 가드. 초기값은 SecureStore 기본과 동일(5000). 구매 경로는
+    // store를 직접 읽으므로 이 플로우는 설정 화면 반응형 표시 전용(백그라운드 정합엔 무관).
+    private val _dailyBudget = MutableStateFlow(5000)
+    val dailyBudget: StateFlow<Int> = _dailyBudget.asStateFlow()
+
+    private val _weeklyBudget = MutableStateFlow(5000)
+    val weeklyBudget: StateFlow<Int> = _weeklyBudget.asStateFlow()
+
     private val _language = MutableStateFlow("system")     // "system"/"ko"/"en"/"ja"
     val language: StateFlow<String> = _language.asStateFlow()
 
@@ -128,6 +136,8 @@ class AppContainer(context: Context) {
         _autoPurchaseMinute.value = store.getAutoPurchaseMinute()
         _balanceAlertEnabled.value = store.getBalanceAlertEnabled()
         _balanceAlertThreshold.value = store.getBalanceAlertThreshold()
+        _dailyBudget.value = store.getDailyBudget()
+        _weeklyBudget.value = store.getWeeklyBudget()
         _language.value = store.getLanguage()
         val currentUser = store.getCredentials().userId
         _loggedInUserId.value = currentUser
@@ -415,12 +425,17 @@ class AppContainer(context: Context) {
      * committed 5슬롯+폴백정책 영속화. revision은 단조 증가(원복해도 신규). 게임 수(autoGames)도 함께 반영.
      * **저장이 구매를 무장하지 않는다** — autoEnabled/게이트/동의는 건드리지 않는다(설계 §9, 안전조건).
      */
-    suspend fun saveNumberConfig(slots: List<Slot720>, fallback: FallbackPolicy) = withContext(Dispatchers.IO) {
+    suspend fun saveNumberConfig(
+        slots: List<Slot720>,
+        fallback: FallbackPolicy,
+        setMode: Boolean = _numberConfig.value.setMode,
+    ) = withContext(Dispatchers.IO) {
         val next = NumberConfig720(
             slots = slots,
             fallback = fallback,
             schemaVersion = NumberConfig720.CURRENT_SCHEMA,
             revision = _numberConfig.value.revision + 1,
+            setMode = setMode,   // 세트 토글이 저장에서 유실되지 않게 명시 반영(schema 2 파생은 toJson이 담당)
         )
         store.setNumberConfig(next.toJson())
         _numberConfig.value = next
@@ -459,6 +474,16 @@ class AppContainer(context: Context) {
         store.setBalanceAlertThreshold(v)
     }
 
+    suspend fun setDailyBudget(v: Int) = withContext(Dispatchers.IO) {
+        _dailyBudget.value = v
+        store.setDailyBudget(v)
+    }
+
+    suspend fun setWeeklyBudget(v: Int) = withContext(Dispatchers.IO) {
+        _weeklyBudget.value = v
+        store.setWeeklyBudget(v)
+    }
+
     // === 데이터 초기화 (원본 설정 화면 `_showResetDialog`) ===
     suspend fun resetAll() = withContext(Dispatchers.IO) {
         store.clearAll()
@@ -474,6 +499,8 @@ class AppContainer(context: Context) {
         _autoPurchaseMinute.value = 0
         _balanceAlertEnabled.value = false
         _balanceAlertThreshold.value = 5000
+        _dailyBudget.value = 5000
+        _weeklyBudget.value = 5000
         _loggedInUserId.value = null
         _lastPurchasedRound.value = 0   // clearAll이 회차·소유 계정 기록도 지운다 — 플로우를 stale로 두지 않는다.
     }

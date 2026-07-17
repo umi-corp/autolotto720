@@ -188,6 +188,14 @@
     <string name="thresholdCustom">直接入力</string>
     <string name="thresholdInputTitle">通知基準額を入力</string>
     <string name="thresholdInputHint">金額 (ウォン)</string>
+    <string name="setModeLabel">全組セット</string>
+    <string name="slotModeLabel">スロット別</string>
+    <string name="setModeInfo">5組すべて同じ番号1枚ずつ · ₩5,000 · 自動割当</string>
+    <string name="setModeConfirm">全組セット · 5枚 · ₩5,000 · 自動</string>
+    <string name="sectionBudget">💰 予算上限</string>
+    <string name="budgetDailyLabel">1日の購入上限</string>
+    <string name="budgetWeeklyLabel">抽選ごとの購入上限</string>
+    <string name="budgetExceeded">購入上限に達しました (1日 ₩%1$d · 抽選 ₩%2$d)</string>
     <string name="buttonConfirm">確認</string>
     <string name="sectionDonation">開発者を応援する</string>
     <string name="donationTitle">コーヒー1杯おごる</string>

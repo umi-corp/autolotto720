@@ -177,6 +177,7 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
     var activeDigit by rememberSaveable { mutableStateOf(0) }
     var fallback by rememberSaveable { mutableStateOf(FallbackPolicy.REASSIGN_ALL) }  // enum=Serializable → autoSaver
     var saved by rememberSaveable { mutableStateOf(true) }
+    var setMode by rememberSaveable { mutableStateOf(false) }  // 모든조 세트(슬롯 편집 없이 5조 동일번호 자동배정)
 
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -210,6 +211,7 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
         if (!initialized) {
             for (i in 0..4) committed[i] = config.slots.getOrElse(i) { Slot720.Unset }
             fallback = config.fallback
+            setMode = config.setMode
             currentSlot = (0..4).firstOrNull { committed[it] == Slot720.Unset } ?: 0
             syncDraftToSlot(currentSlot)
             if (config.revision > 0L || config.slots.any { it != Slot720.Unset }) initialized = true
@@ -343,6 +345,31 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.height(16.dp))
 
+                // 모드 세그먼트 — [슬롯별] / [모든조 세트]. 세트 토글은 즉시 저장(revision 증가) —
+                // 세트는 조 편집이 없어 토글 자체가 확정이다. saved 색은 committed+세트가 영속됨을 반영.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !setMode,
+                        enabled = !locked,
+                        onClick = {
+                            if (setMode) { setMode = false; vm.saveConfig(committed.toList(), fallback, false); saved = true }
+                        },
+                        label = { Text(stringResource(R.string.slotModeLabel), fontWeight = FontWeight.Bold) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    FilterChip(
+                        selected = setMode,
+                        enabled = !locked,
+                        onClick = {
+                            if (!setMode) { setMode = true; vm.saveConfig(committed.toList(), fallback, true); saved = true }
+                        },
+                        label = { Text(stringResource(R.string.setModeLabel), fontWeight = FontWeight.Bold) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+
+                if (!setMode) {
                 SlotTabs(
                     committed = committed,
                     currentSlot = currentSlot,
@@ -468,6 +495,14 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                     onSelect = { if (it != fallback) { fallback = it; saved = false } },
                 )
                 Spacer(Modifier.height(16.dp))
+                } else {
+                    // 모든조 세트 — 슬롯 편집 없이 5개 조 동일번호 자동배정 1매씩(§ 세트 모드).
+                    InfoCard(
+                        title = stringResource(R.string.setModeLabel),
+                        desc = stringResource(R.string.setModeInfo),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
 
                 // 저장 — committed + 폴백 영속. 저장/미저장 색 전환. 저장이 구매를 무장하지 않음(§9).
                 // 저장 완료 색은 645와 동일한 그린 고정 — 720 테마 tertiary(LgGold)는 당첨 강조용이라 쓰지 않는다.
@@ -480,10 +515,10 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                     if (saved) (if (dark) Color(0xFF10300A) else Color.White) else MaterialTheme.colorScheme.onPrimary,
                     label = "saveContent",
                 )
-                val gameCount = committed.count { it != Slot720.Unset }
+                val gameCount = if (setMode) 5 else committed.count { it != Slot720.Unset }
                 Button(
                     onClick = {
-                        vm.saveConfig(committed.toList(), fallback)
+                        vm.saveConfig(committed.toList(), fallback, setMode)
                         saved = true
                         scope.launch {
                             snackbar.showSnackbar(
@@ -1129,12 +1164,16 @@ private fun InstantPurchaseDialogs(state: InstantState, vm: PurchaseSetupViewMod
             onDismissRequest = { vm.dismissInstant() },
             title = { Text(stringResource(R.string.instantConfirmTitle)) },
             text = {
-                Text(
-                    stringResource(
-                        R.string.instantConfirmBody,
-                        state.round, state.games, formatNumber(state.games * 1000),
-                    ),
-                )
+                if (state.config.setMode) {
+                    Text(stringResource(R.string.setModeConfirm))
+                } else {
+                    Text(
+                        stringResource(
+                            R.string.instantConfirmBody,
+                            state.round, state.games, formatNumber(state.games * 1000),
+                        ),
+                    )
+                }
             },
             confirmButton = {
                 TextButton(onClick = { vm.confirmFirst() }) { Text(stringResource(R.string.buttonConfirm)) }

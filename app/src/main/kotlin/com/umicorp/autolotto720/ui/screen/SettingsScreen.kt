@@ -148,6 +148,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
     val minute by vm.autoPurchaseMinute.collectAsState()
     val alertEnabled by vm.balanceAlertEnabled.collectAsState()
     val threshold by vm.balanceAlertThreshold.collectAsState()
+    val dailyBudget by vm.dailyBudget.collectAsState()
+    val weeklyBudget by vm.weeklyBudget.collectAsState()
     val language by vm.language.collectAsState()
     val loginState by vm.loginState.collectAsState()
 
@@ -160,6 +162,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
     var showReset by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showThreshold by remember { mutableStateOf(false) }
+    var showDailyBudget by remember { mutableStateOf(false) }
+    var showWeeklyBudget by remember { mutableStateOf(false) }
     var showDebugPurchase by remember { mutableStateOf(false) }  // DEBUG 전용 실구매 확인
     var debugBusy by remember { mutableStateOf(false) }
 
@@ -357,6 +361,26 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
             }
             Spacer(Modifier.height(24.dp))
 
+            // ===== 예산 한도 (즉시·예약 구매 공통 지출 가드) =====
+            SettingsSection(stringResource(R.string.sectionBudget)) {
+                ListItem(
+                    modifier = Modifier.clickable { showDailyBudget = true },
+                    colors = transparentListColors(),
+                    leadingContent = { SettingIcon(Icons.Rounded.AccountBalanceWallet, LgGreen) },
+                    headlineContent = { Text(stringResource(R.string.budgetDailyLabel), fontWeight = FontWeight.Bold) },
+                    trailingContent = { Text("₩${formatNumber(dailyBudget)}", fontWeight = FontWeight.SemiBold) },
+                )
+                HorizontalDivider()
+                ListItem(
+                    modifier = Modifier.clickable { showWeeklyBudget = true },
+                    colors = transparentListColors(),
+                    leadingContent = { SettingIcon(Icons.Rounded.AccountBalanceWallet, LgAmber) },
+                    headlineContent = { Text(stringResource(R.string.budgetWeeklyLabel), fontWeight = FontWeight.Bold) },
+                    trailingContent = { Text("₩${formatNumber(weeklyBudget)}", fontWeight = FontWeight.SemiBold) },
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+
             // ===== 알림 =====
             SettingsSection(stringResource(R.string.sectionNotifications)) {
                 SwitchRow(
@@ -542,6 +566,22 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Uni
             initial = threshold,
             onDismiss = { showThreshold = false },
             onConfirm = { v -> vm.setBalanceAlertThreshold(v); showThreshold = false },
+        )
+    }
+    if (showDailyBudget) {
+        BudgetDialog(
+            title = stringResource(R.string.budgetDailyLabel),
+            initial = dailyBudget,
+            onDismiss = { showDailyBudget = false },
+            onConfirm = { v -> vm.setDailyBudget(v); showDailyBudget = false },
+        )
+    }
+    if (showWeeklyBudget) {
+        BudgetDialog(
+            title = stringResource(R.string.budgetWeeklyLabel),
+            initial = weeklyBudget,
+            onDismiss = { showWeeklyBudget = false },
+            onConfirm = { v -> vm.setWeeklyBudget(v); showWeeklyBudget = false },
         )
     }
 }
@@ -769,6 +809,37 @@ private fun ThresholdDialog(initial: Int, onDismiss: () -> Unit, onConfirm: (Int
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttonCancel)) } },
     )
 }
+
+/** 예산 한도 입력 — 1,000원 단위·1,000~150,000 범위. 확정 시 [coerceBudget]로 반올림·클램프. */
+@Composable
+private fun BudgetDialog(title: String, initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+    var text by remember { mutableStateOf(initial.toString()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter(Char::isDigit) },
+                label = { Text(stringResource(R.string.thresholdInputHint)) },
+                prefix = { Text("₩ ") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val v = text.toIntOrNull()
+                if (v != null) onConfirm(coerceBudget(v)) else onDismiss()
+            }) { Text(stringResource(R.string.buttonConfirm)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttonCancel)) } },
+    )
+}
+
+/** 예산 입력 정규화(순수) — 1,000 단위 반올림 후 1,000~150,000 클램프. */
+private fun coerceBudget(won: Int): Int = ((won + 500) / 1000 * 1000).coerceIn(1000, 150000)
 
 /** M3 시간 선택 다이얼로그(원본 showTimePicker, 24시간제). */
 @Composable
