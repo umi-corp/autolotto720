@@ -3,9 +3,15 @@ package com.umicorp.autolotto720.scheduler
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.umicorp.autolotto720.PurchaseFailure
 import com.umicorp.autolotto720.accountScopedRound
+import com.umicorp.autolotto720.attemptAmount
+import com.umicorp.autolotto720.classifyPurchaseFailure
+import com.umicorp.autolotto720.parsePending
+import com.umicorp.autolotto720.data.BudgetGuard
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.SecureStore
+import com.umicorp.autolotto720.data.SpendEntry
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
 import com.umicorp.autolotto720.dhlottery.Feature720
@@ -13,6 +19,8 @@ import com.umicorp.autolotto720.dhlottery.PurchaseService720
 import com.umicorp.autolotto720.dhlottery.Round720
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.json.JSONObject
+import java.time.LocalDate
 import java.time.ZonedDateTime
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -135,30 +143,81 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 val scopedRound = accountScopedRound(store.getLastPurchasedRound(), store.getLastPurchaseOwner(), userId)
                 if (isRoundAlreadyPurchased(now, scopedRound)) return
 
+                val round = Round720.getUpcomingDrawRound(now)   // 이후 모든 경로에 동일 회차 주입(TOCTOU 제거)
+                val today = LocalDate.now(Round720.KST).toEpochDay()
+
+                step = "pending_guard"
+                // 직전 자동구매 결과 불명(PENDING 잔존)이면 같은 회차 재구매 금지 — 내역 확인 유도.
+                val pending = parsePending(store.getPendingPurchase())
+                if (pending?.round == round) {
+                    Notifications.show(
+                        ctx,
+                        "⚠️ AutoLotto720 확인 필요",
+                        "직전 자동구매 결과가 확인되지 않았습니다. 구매 내역을 확인해주세요.",
+                        2,
+                        tab = Notifications.TAB_HISTORY,
+                    )
+                    return
+                }
+
+                step = "budget_guard"
+                // 결제 진입 전, 미결 PENDING까지 더해 일/회차 한도 검사(초과 시 미결제·미기록·미커밋).
+                val attempt = attemptAmount(config)
+                val ledger = BudgetGuard.parseLedger(store.getSpendLedger())
+                if (!BudgetGuard.check(ledger, today, round, attempt, store.getDailyBudget(), store.getWeeklyBudget(), pending)) {
+                    Notifications.show(
+                        ctx,
+                        "ℹ️ AutoLotto720 예산 한도",
+                        "설정한 예산 한도에 도달해 이번 회차 자동구매를 건너뛰었습니다.",
+                        2,
+                        tab = Notifications.TAB_SETTINGS,
+                    )
+                    return
+                }
+
+                step = "pending_write"
+                // connPro 진입 전 선기록 — 결과 불명·프로세스 사망 시 이 회차 재결제 차단. 무결제 단계라
+                // 쓰기 실패는 재시도 가능해야 하므로 별도 step([purchase] 접두 아님 → 비-ambiguous, N12).
+                if (!store.setPendingPurchase(
+                        JSONObject().put("round", round).put("epochDay", today).put("amount", attempt).toString())
+                ) {
+                    throw Exception("결제 준비에 실패했습니다.")   // 무결제 — 비-ambiguous라 재시도 가능
+                }
+
                 step = "login"
                 auth.login(userId, password)
 
                 step = "purchase"
                 val purchaseService = PurchaseService720(auth, session)
                 val r = try {
-                    // round는 위 가드와 동일 회차를 주입(TOCTOU 제거) — Task 5에서 배선 정교화.
-                    purchaseService.purchase(config, Round720.getUpcomingDrawRound(now))
+                    purchaseService.purchase(config, round)   // round 주입(TOCTOU 제거)
                 } catch (purchaseError: Exception) {
                     if (purchaseError is CancellationException) throw purchaseError   // 취소는 [purchase]로 오분류하지 않는다(R3).
-                    throw Exception(purchaseError.message ?: "$purchaseError")
+                    when (classifyPurchaseFailure(purchaseError)) {
+                        is PurchaseFailure.Rejected -> store.clearPendingPurchase()   // 무결제 확정 — PENDING 해제
+                        is PurchaseFailure.Unknown -> {                              // 결과 불명 — 가드 커밋 + 전액 원장 + PENDING 유지
+                            store.setLastPurchase(round, userId)
+                            recordSpendWorker(store, round, today, attempt)
+                        }
+                    }
+                    throw Exception(purchaseError.message ?: "$purchaseError")   // [purchase] 래핑 → 비재시도
                 }
+
+                // 확정 성공/부분 — 원장에 지출 기록(부분은 시도 전액). PENDING 해제는 아래 commit 성공 후.
+                val ledgerOk = recordSpendWorker(store, r.round, today, if (r.partialFailure != null) attempt else r.amount)
 
                 // 성공 즉시 회차+계정 기록(commit) — 이후 재실행은 round_guard가 차단.
                 // ponytail: 서버 처리~기록 사이 찰나에 킬되는 창은 남는다(중복결제 double-charge ceiling,
-                // "autolotto 정책 그대로" 결정으로 수용) — unique work 직렬화 + [purchase] 비재시도가 1차 방어.
+                // "autolotto 정책 그대로" 결정으로 수용) — unique work 직렬화 + [purchase] 비재시도 + PENDING 선기록이 방어.
                 // 결제는 성공했으므로 기록 저장 실패는 [purchase]가 아닌 [commit]으로 분류 → "구매 실패" 오보 방지(R2 N6, 비재시도).
                 step = "commit"
                 // 커밋 반환 확인(G2) — false면 디스크 가드 미기록 → 재실행 시 round_guard가 못 막아 중복결제.
-                // 즉시구매와 동일 정책: [commit]로 분류(비재시도·성공 오보 금지) + 예약 자동구매 중단(재구매 차단).
+                // 즉시구매와 동일 정책: [commit]로 분류(비재시도·성공 오보 금지) + 예약 자동구매 중단(재구매 차단). PENDING은 백업으로 유지.
                 if (!store.setLastPurchase(r.round, userId)) {   // (회차, 계정) 원자 커밋 — 부분 기록 방지(F3).
                     store.setAutoEnabled(false)                  // doWork 알람 재등록 게이트도 내려 재실행 차단
                     throw Exception("회차 기록 저장에 실패했습니다.")   // step=commit → [commit] 래핑 → 비재시도
                 }
+                if (ledgerOk) store.clearPendingPurchase()   // 가드+원장 반영 완료 → PENDING 해제. 원장 실패 시 PENDING 유지
                 r
             }
 
@@ -220,4 +279,10 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
         internal fun isAmbiguousFailure(message: String): Boolean =
             message.startsWith("[purchase]") || message.startsWith("[commit]") || message.startsWith("[notify]")
     }
+}
+
+/** 지출을 원장에 더하고 7일 정리 후 저장, commit 성공 여부 반환(AppContainer.recordSpend와 동형). */
+private fun recordSpendWorker(store: SecureStore, round: Int, today: Long, amount: Int): Boolean {
+    val next = BudgetGuard.record(BudgetGuard.parseLedger(store.getSpendLedger()), SpendEntry(round, today, amount), today)
+    return store.setSpendLedger(BudgetGuard.toJson(next))
 }

@@ -5,10 +5,12 @@ import android.content.Context
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.umicorp.autolotto720.data.BudgetGuard
 import com.umicorp.autolotto720.data.FallbackPolicy
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.SecureStore
 import com.umicorp.autolotto720.data.Slot720
+import com.umicorp.autolotto720.data.SpendEntry
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotteryException
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
@@ -210,7 +212,7 @@ class AppContainer(context: Context) {
             // 번호 탭에 설정된 게임이 있으면 그대로(수동/반자동/전부자동), 없으면 반자동 1매로 계약만 검증.
             val svc = PurchaseService720(auth, session)
             val config = _numberConfig.value
-            val round = Round720.getUpcomingDrawRound()   // Task 5에서 배선 정교화 — 여기선 컴파일용 최소 주입
+            val round = Round720.getUpcomingDrawRound(ZonedDateTime.now(Round720.KST))   // 회차 주입 — 모든 경로 동일 회차(TOCTOU 제거)
             val result = if (config.gameCount > 0) svc.purchase(config, round) else svc.purchase(games = 1, round = round)
             refreshBalance()
             if (result.tickets.isEmpty()) "구매한 게임 없음 (지정번호 점유 + 구매 포기 정책)"
@@ -259,6 +261,12 @@ class AppContainer(context: Context) {
     /** 결제는 성공했으나 로컬 회차 가드 영속화(commit)에 실패한 경우 — 결과를 실어 성공(경고)로 표시한다. */
     class PurchaseRecordFailedException(val result: PurchaseResult720) : Exception()
 
+    /** 지출을 원장에 더하고 7일 초과 정리 후 저장. commit 성공 여부 반환(성공·부분·결과불명 공통). */
+    private fun recordSpend(round: Int, today: Long, amount: Int): Boolean {
+        val next = BudgetGuard.record(BudgetGuard.parseLedger(store.getSpendLedger()), SpendEntry(round, today, amount), today)
+        return store.setSpendLedger(BudgetGuard.toJson(next))
+    }
+
     /**
      * 즉시 구매. [expectedRound]는 확정 다이얼로그가 표시한 회차 — Mutex 안에서 현재 회차와 대조해
      * 다르면 [RoundChangedException](구매 요청 없음, 표시≠결제 방지). [extra]=false(첫 구매:
@@ -298,27 +306,64 @@ class AppContainer(context: Context) {
                 PurchaseGate.PROCEED -> Unit
             }
 
+            // ① 미결 PENDING이 이번 회차에 남아 있으면 직전 결제 결과 불명 — extra 포함 모든 결제 금지(내역 확인 유도, F2).
+            // 순서 고정(PENDING 잔존 → 예산): 예산 예외보다 "결과 불명" 안내를 먼저 표면화해 사용자 안내를 정확히 한다.
+            val pending = parsePending(store.getPendingPurchase())
+            if (pending?.round == round) {
+                _lastPurchasedRound.value = round
+                throw PurchaseResultUnknownException(DhlotteryException("직전 구매 결과가 확인되지 않았습니다. 내역을 확인해주세요."))
+            }
+
+            // ② 예산 가드 — 결제 진입 전, 미결 PENDING까지 더해 일/회차 한도를 검사(초과 시 미결제·미기록·미커밋).
+            val attempt = if (extra) autoGames * 1000 else attemptAmount(config!!)
+            val today = java.time.LocalDate.now(Round720.KST).toEpochDay()
+            val ledger = BudgetGuard.parseLedger(store.getSpendLedger())
+            if (!BudgetGuard.check(ledger, today, round, attempt, store.getDailyBudget(), store.getWeeklyBudget(), pending)) {
+                throw BudgetExceededException(store.getDailyBudget(), store.getWeeklyBudget())
+            }
+
             purchaseAuth.login(id, pw)                              // 세션 만료 대비 매번 재로그인(워커 패턴)
 
             val svc = PurchaseService720(purchaseAuth, purchaseSession)
             val cfg = if (extra) null else requireNotNull(config) { "구매할 게임 설정이 없습니다." }
+
+            // connPro 진입 전 선기록(round·epochDay·amount) — 결과 불명·프로세스 사망 시 이 회차 재결제 차단.
+            // commit 실패면 결제에 들어가지 않는다(fail-closed). 원장은 확정 후에만 기록되고, 그 전엔 이 PENDING이 예산에 반영된다.
+            if (!store.setPendingPurchase(pendingJson(round, today, attempt))) {
+                throw DhlotteryException("결제 준비에 실패했습니다. 다시 시도해주세요.")
+            }
+
             val r = try {
-                // 추가 구매는 조·번호 모두 자동(완전자동) N게임 — 저장된 수동 번호 중복 구매 방지.
-                if (extra) svc.purchase(games = autoGames, round = round) else svc.purchase(cfg!!, round)
+                // 추가 구매는 조·번호 모두 자동(완전자동) N게임 — 저장된 수동 번호 중복 구매 방지. round 주입(TOCTOU 제거).
+                if (extra) svc.purchase(games = autoGames, round = round) else svc.purchase(cfg!!, round = round)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e             // 취소는 재래핑 금지(구조적 동시성, F1)
                 // 720 서비스는 결과 불명도 DhlotteryException으로 던진다 — 오분류는 중복 결제 위험(F14로 분리).
-                throw when (val f = classifyPurchaseFailure(e)) {
-                    is PurchaseFailure.Rejected -> f.cause                        // 서버 확정 거절 — 메시지 그대로(재시도 안전)
-                    is PurchaseFailure.Unknown -> PurchaseResultUnknownException(f.cause)  // 결과 불명 — 재시도 유도 금지
+                when (val f = classifyPurchaseFailure(e)) {
+                    is PurchaseFailure.Rejected -> {
+                        runCatching { store.clearPendingPurchase() }   // 무결제 확정 — PENDING 해제, 예산 미반영
+                        throw f.cause                                  // 서버 확정 거절 — 메시지 그대로(재시도 안전)
+                    }
+                    is PurchaseFailure.Unknown -> {
+                        // 결과 불명 — 회차 가드 커밋 + 시도 전액 원장 기록. 둘 다 성공해야 PENDING 해제(아니면 백업 유지).
+                        withContext(NonCancellable) {
+                            val g = runCatching { store.setLastPurchase(round, id) }.getOrDefault(false)
+                            val l = recordSpend(round, today, attempt)      // 전액
+                            if (g && l) runCatching { store.clearPendingPurchase() }
+                        }
+                        throw PurchaseResultUnknownException(f.cause)   // 결과 불명 — 재시도 유도 금지
+                    }
                 }
             }
-            // 성공 확정 — 결제는 됨. 필수 보상(가드 기록·실패 시 예약중단)은 취소 불가 구간에서 — CE가 끊지 못하게 한다(G3, F3).
+            // 성공 확정 — 결제는 됨. 필수 보상(가드·원장 커밋·실패 시 예약중단)은 취소 불가 구간에서 — CE가 끊지 못하게 한다(G3, F3).
             withContext(NonCancellable) {
                 _lastPurchasedRound.value = r.round                      // 인메모리 가드(이 세션 CTA 보호)
-                val committed = runCatching { store.setLastPurchase(r.round, id) }.getOrDefault(false)
-                if (!committed) {
-                    // 디스크 가드 미기록 → 워커 재구매 가능. 예약 자동구매 중단 시도(성공 여부와 무관하게 UI는 확인 유도, 단정 금지).
+                val committed = runCatching { store.setLastPurchase(round, id) }.getOrDefault(false)   // round 주입값과 동일
+                val ledgerOk = recordSpend(round, today, if (r.partialFailure != null) attempt else r.amount)  // 부분은 시도 전액
+                if (committed && ledgerOk) {
+                    runCatching { store.clearPendingPurchase() }   // 가드+원장 반영 완료 → PENDING 해제 안전
+                } else {
+                    // 디스크 가드/원장 미반영 → 워커 재구매 가능. 예약 자동구매 중단 + PENDING을 백업으로 유지.
                     runCatching { setAutoEnabled(false) }
                     throw PurchaseRecordFailedException(r)               // 결제 성공은 유지(재결제 문구 금지)
                 }
@@ -510,3 +555,22 @@ fun purchaseGate(extra: Boolean, recordedRound: Int, currentRound: Int, expected
     !extra && recordedRound >= currentRound -> PurchaseGate.ALREADY_PURCHASED
     else -> PurchaseGate.PROCEED
 }
+
+/** 설정 기준 시도 금액(원) — 세트 5,000, 슬롯 모드 게임수×1,000. */
+fun attemptAmount(config: NumberConfig720): Int =
+    if (config.setMode) 5000 else config.gameCount * 1000
+
+/** connPro 선기록 JSON {round, epochDay, amount} — check(pending=…)와 동일 필드. */
+private fun pendingJson(round: Int, epochDay: Long, amount: Int): String =
+    org.json.JSONObject().put("round", round).put("epochDay", epochDay).put("amount", amount).toString()
+
+/** PENDING JSON → SpendEntry(없거나 손상·round 필드 없음이면 null). */
+fun parsePending(json: String?): SpendEntry? {
+    if (json.isNullOrBlank()) return null
+    val o = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return null
+    if (!o.has("round")) return null
+    return SpendEntry(o.optInt("round"), o.optLong("epochDay"), o.optInt("amount"))
+}
+
+/** 예산 한도 초과로 결제에 진입하지 못한 경우 — 재시도 유도 금지. daily/weekly 값만 담고 표시는 UI가 리소스로 매핑. */
+class BudgetExceededException(val daily: Int, val weekly: Int) : Exception("budget exceeded")
