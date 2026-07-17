@@ -201,6 +201,12 @@ class SecureStore(context: Context) {
     fun getSpendLedger(): String? = prefs.getString(SecureKeys.SPEND_LEDGER, null)
     fun setSpendLedger(json: String): Boolean = prefs.edit().putString(SecureKeys.SPEND_LEDGER, json).commit()
 
+    /** 지출을 원장에 더하고 7일 초과 정리 후 저장. commit 성공 여부 반환(성공·부분·결과불명 공통). */
+    fun recordSpend(round: Int, today: Long, amount: Int): Boolean {
+        val next = BudgetGuard.record(BudgetGuard.parseLedger(getSpendLedger()), SpendEntry(round, today, amount), today)
+        return setSpendLedger(BudgetGuard.toJson(next))
+    }
+
     fun getPendingPurchase(): String? = prefs.getString(SecureKeys.PENDING_PURCHASE, null)
     /** money-path: commit() 반환으로 영속 성공 확인 — false면 호출부가 결제에 진입하지 않는다. */
     fun setPendingPurchase(json: String): Boolean = prefs.edit().putString(SecureKeys.PENDING_PURCHASE, json).commit()

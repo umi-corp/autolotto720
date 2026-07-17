@@ -11,7 +11,6 @@ import com.umicorp.autolotto720.parsePending
 import com.umicorp.autolotto720.data.BudgetGuard
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.SecureStore
-import com.umicorp.autolotto720.data.SpendEntry
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
 import com.umicorp.autolotto720.dhlottery.Feature720
@@ -201,7 +200,7 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                         is PurchaseFailure.Unknown -> withContext(NonCancellable) {   // 결과 불명 — 가드 커밋 + 전액 원장 + PENDING 유지(즉시구매와 대칭, CE가 보상을 끊지 못하게)
                             // money-path 방호: 원장/가드 commit 예외가 아래 [purchase] 래핑을 이탈하지 않게 runCatching(즉시구매와 대칭).
                             runCatching { store.setLastPurchase(round, userId) }
-                            runCatching { recordSpendWorker(store, round, today, attempt) }
+                            runCatching { store.recordSpend(round, today, attempt) }
                         }
                     }
                     throw Exception(purchaseError.message ?: "$purchaseError")   // [purchase] 래핑 → 비재시도
@@ -210,8 +209,8 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 // 성공 원장+commit 보상은 취소 불가 구간에서 — CE가 커밋을 끊지 못하게(즉시구매와 대칭, F3).
                 withContext(NonCancellable) {
                     // 확정 성공/부분 — 원장에 지출 기록(부분은 시도 전액). PENDING 해제는 아래 commit 성공 후.
-                    // money-path 방호: recordSpendWorker(commit) 예외가 [commit] 커밋 경로를 이탈하지 않게 runCatching(즉시구매와 대칭).
-                    val ledgerOk = runCatching { recordSpendWorker(store, round, today, if (r.partialFailure != null) attempt else r.amount) }.getOrDefault(false)
+                    // money-path 방호: store.recordSpend(commit) 예외가 [commit] 커밋 경로를 이탈하지 않게 runCatching(즉시구매와 대칭).
+                    val ledgerOk = runCatching { store.recordSpend(round, today, if (r.partialFailure != null) attempt else r.amount) }.getOrDefault(false)
 
                     // 성공 즉시 회차+계정 기록(commit) — 이후 재실행은 round_guard가 차단.
                     // ponytail: 서버 처리~기록 사이 찰나에 킬되는 창은 남는다(중복결제 double-charge ceiling,
@@ -303,10 +302,4 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
         internal fun isAmbiguousFailure(message: String): Boolean =
             message.startsWith("[purchase]") || message.startsWith("[commit]") || message.startsWith("[notify]")
     }
-}
-
-/** 지출을 원장에 더하고 7일 정리 후 저장, commit 성공 여부 반환(AppContainer.recordSpend와 동형). */
-private fun recordSpendWorker(store: SecureStore, round: Int, today: Long, amount: Int): Boolean {
-    val next = BudgetGuard.record(BudgetGuard.parseLedger(store.getSpendLedger()), SpendEntry(round, today, amount), today)
-    return store.setSpendLedger(BudgetGuard.toJson(next))
 }

@@ -280,12 +280,6 @@ class AppContainer(context: Context) {
     /** 결제는 성공했으나 로컬 회차 가드 영속화(commit)에 실패한 경우 — 결과를 실어 성공(경고)로 표시한다. */
     class PurchaseRecordFailedException(val result: PurchaseResult720) : Exception()
 
-    /** 지출을 원장에 더하고 7일 초과 정리 후 저장. commit 성공 여부 반환(성공·부분·결과불명 공통). */
-    private fun recordSpend(round: Int, today: Long, amount: Int): Boolean {
-        val next = BudgetGuard.record(BudgetGuard.parseLedger(store.getSpendLedger()), SpendEntry(round, today, amount), today)
-        return store.setSpendLedger(BudgetGuard.toJson(next))
-    }
-
     /**
      * 즉시 구매. [expectedRound]는 확정 다이얼로그가 표시한 회차 — Mutex 안에서 현재 회차와 대조해
      * 다르면 [RoundChangedException](구매 요청 없음, 표시≠결제 방지). [extra]=false(첫 구매:
@@ -369,7 +363,7 @@ class AppContainer(context: Context) {
                         // "결과 불명 → PENDING 유지" 불변식을 지킨다. 원장 기록은 예외가 오보로 새지 않게 runCatching(money-path 방호).
                         withContext(NonCancellable) {
                             runCatching { store.setLastPurchase(round, id) }
-                            runCatching { recordSpend(round, today, attempt) }      // 전액
+                            runCatching { store.recordSpend(round, today, attempt) }      // 전액
                         }
                         throw PurchaseResultUnknownException(f.cause)   // 결과 불명 — 재시도 유도 금지
                     }
@@ -381,7 +375,7 @@ class AppContainer(context: Context) {
                 val committed = runCatching { store.setLastPurchase(round, id) }.getOrDefault(false)   // round 주입값과 동일
                 // money-path 방호: recordSpend(EncryptedSharedPreferences commit) 예외가 PurchaseRecordFailedException 경로를
                 // 이탈해 ViewModel 일반 catch → "구매 실패" 오보(결제 완료 후)로 새지 않게 runCatching(setLastPurchase와 일관).
-                val ledgerOk = runCatching { recordSpend(round, today, if (r.partialFailure != null) attempt else r.amount) }.getOrDefault(false)  // 부분은 시도 전액
+                val ledgerOk = runCatching { store.recordSpend(round, today, if (r.partialFailure != null) attempt else r.amount) }.getOrDefault(false)  // 부분은 시도 전액
                 // 부분 성공이라도 미확정(Unknown) 게임이 있으면 PENDING 유지 — extra 재진입 이중결제 창을 막는다.
                 // partialFailure가 없거나(완전 성공) cause가 Rejected(서버 확정 거절, 무결제)일 때만 PENDING 해제 안전.
                 val resolvable = r.partialFailure == null || classifyPurchaseFailure(r.partialFailure!!.cause) is PurchaseFailure.Rejected
