@@ -10,6 +10,7 @@ import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.data.WinningNumbers720
 import com.umicorp.autolotto720.dhlottery.PurchaseResult720
 import com.umicorp.autolotto720.dhlottery.Round720
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -136,25 +137,39 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
         return SettingsViewModel.isValidPurchaseTime(now.dayOfWeek.value, now.hour, now.minute)
     }
 
+    /** 탭 판정 코루틴 핸들 — 이중 탭으로 판정 코루틴이 둘 뜨는 것 자체를 차단. */
+    private var tapJob: Job? = null
+
     /** CTA 탭: 게이트 재검증 후 모드 분기(첫 구매/추가/설정 유도). 저장된 설정 기준. */
     fun onInstantTap() {
-        if (_instantState.value != InstantState.Idle) return
-        viewModelScope.launch {
+        if (_instantState.value != InstantState.Idle || tapJob?.isActive == true) return
+        tapJob = viewModelScope.launch {
             if (!isSaleOpenNow()) {                                 // 표시가 stale했던 경우 — 사유 표시
-                _instantState.value = InstantState.SaleClosed
+                advanceFromIdle(InstantState.SaleClosed)
                 return@launch
             }
             runCatching { container.refreshLastPurchasedRound() }
                 .onFailure { if (it is CancellationException) throw it }
             val round = Round720.getUpcomingDrawRound()
             if (container.lastPurchasedRound.value >= round) {
-                _instantState.value = InstantState.PickingExtra(round)
+                advanceFromIdle(InstantState.PickingExtra(round))
                 return@launch
             }
             val saved = container.numberConfig.value
-            _instantState.value = if (saved.gameCount == 0) InstantState.NeedsSetup
-            else InstantState.ConfirmingFirst(round, saved)
+            advanceFromIdle(
+                if (saved.gameCount == 0) InstantState.NeedsSetup
+                else InstantState.ConfirmingFirst(round, saved),
+            )
         }
+    }
+
+    /**
+     * Idle일 때만 상태 전이. 빠른 이중 탭으로 코루틴이 둘 뜨면 늦게 복귀한 쪽이 진행 중
+     * 상태(InProgress 등)를 다이얼로그 단계로 되돌려 재확정(=이중 결제) 여지를 만들 수 있어,
+     * 상태 기록 직전에 선점 여부를 재확인한다(viewModelScope=Main 단일 스레드라 원자적).
+     */
+    private fun advanceFromIdle(next: InstantState) {
+        if (_instantState.value == InstantState.Idle) _instantState.value = next
     }
 
     /** 첫 구매 확정 — 탭 시점 저장 설정 스냅샷 그대로 실행. 최종 회차·가드 재판정은 컨테이너 Mutex 안. */
