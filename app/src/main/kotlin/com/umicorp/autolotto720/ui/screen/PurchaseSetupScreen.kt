@@ -20,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -467,12 +468,14 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(16.dp))
 
                 // 저장 — committed + 폴백 영속. 저장/미저장 색 전환. 저장이 구매를 무장하지 않음(§9).
+                // 저장 완료 색은 645와 동일한 그린 고정 — 720 테마 tertiary(LgGold)는 당첨 강조용이라 쓰지 않는다.
+                val dark = isSystemInDarkTheme()
                 val saveContainer by animateColorAsState(
-                    if (saved) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                    if (saved) (if (dark) Color(0xFF9BD97A) else Color(0xFF6FBF3B)) else MaterialTheme.colorScheme.primary,
                     label = "saveContainer",
                 )
                 val saveContent by animateColorAsState(
-                    if (saved) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onPrimary,
+                    if (saved) (if (dark) Color(0xFF10300A) else Color.White) else MaterialTheme.colorScheme.onPrimary,
                     label = "saveContent",
                 )
                 val gameCount = committed.count { it != Slot720.Unset }

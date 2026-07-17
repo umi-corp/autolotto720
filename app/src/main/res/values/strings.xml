@@ -81,7 +81,7 @@
     <string name="fallbackGiveUp">구매 포기</string>
     <string name="buttonSaveGames">%1$d게임 저장</string>
     <string name="buttonSaveEmpty">저장 (구매 안 함)</string>
-    <string name="buttonSaveDone">저장됨</string>
+    <string name="buttonSaveDone">저장 완료!</string>
     <string name="snackbarSaveSuccess">%1$d게임 저장 완료</string>
     <string name="snackbarSaveEmpty">설정을 저장했습니다 (구매 안 함)</string>
     <string name="dialogOverwriteTitle">기존 설정 덮어쓰기</string>
@@ -221,7 +221,7 @@
     <string name="updateDownloading">다운로드 중…</string>
 
     <!-- 즉시 구매(번호 탭 저장 버튼 아래 CTA) -->
-    <string name="buttonInstantPurchase">🎰 지금 바로 구매</string>
+    <string name="buttonInstantPurchase">⚡ 지금 바로 구매</string>
     <string name="buttonExtraPurchase">➕ 추가 구매</string>
     <string name="instantNotSaleTime">지금은 판매시간이 아닙니다</string>
     <string name="instantConfirmTitle">즉시 구매</string>

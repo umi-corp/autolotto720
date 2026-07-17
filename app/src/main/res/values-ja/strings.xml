@@ -76,7 +76,7 @@
     <string name="fallbackGiveUp">購入をあきらめる</string>
     <string name="buttonSaveGames">%1$dゲーム保存</string>
     <string name="buttonSaveEmpty">保存（購入なし）</string>
-    <string name="buttonSaveDone">保存済み</string>
+    <string name="buttonSaveDone">保存完了！</string>
     <string name="snackbarSaveSuccess">%1$dゲーム保存しました</string>
     <string name="snackbarSaveEmpty">設定を保存しました（購入なし）</string>
     <string name="dialogOverwriteTitle">既存の設定を上書き</string>
@@ -213,7 +213,7 @@
     <string name="updateDownloading">ダウンロード中…</string>
 
     <!-- 即時購入(番号タブの保存ボタン下のCTA) -->
-    <string name="buttonInstantPurchase">🎰 今すぐ購入</string>
+    <string name="buttonInstantPurchase">⚡ 今すぐ購入</string>
     <string name="buttonExtraPurchase">➕ 追加購入</string>
     <string name="instantNotSaleTime">現在は販売時間外です</string>
     <string name="instantConfirmTitle">即時購入</string>

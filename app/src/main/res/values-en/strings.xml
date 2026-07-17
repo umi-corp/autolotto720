@@ -76,7 +76,7 @@
     <string name="fallbackGiveUp">Give up</string>
     <string name="buttonSaveGames">Save %1$d games</string>
     <string name="buttonSaveEmpty">Save (no purchase)</string>
-    <string name="buttonSaveDone">Saved</string>
+    <string name="buttonSaveDone">Saved!</string>
     <string name="snackbarSaveSuccess">Saved %1$d games</string>
     <string name="snackbarSaveEmpty">Settings saved (no purchase)</string>
     <string name="dialogOverwriteTitle">Overwrite existing setup</string>
@@ -213,7 +213,7 @@
     <string name="updateDownloading">Downloading…</string>
 
     <!-- Instant purchase (CTA under the save button on the Numbers tab) -->
-    <string name="buttonInstantPurchase">🎰 Buy Now</string>
+    <string name="buttonInstantPurchase">⚡ Buy Now</string>
     <string name="buttonExtraPurchase">➕ Buy More</string>
     <string name="instantNotSaleTime">Outside sale hours</string>
     <string name="instantConfirmTitle">Instant Purchase</string>
