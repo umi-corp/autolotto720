@@ -211,4 +211,24 @@
     <string name="buttonUpdateNow">Update</string>
     <string name="buttonUpdateLater">Later</string>
     <string name="updateDownloading">Downloading…</string>
+
+    <!-- Instant purchase (CTA under the save button on the Numbers tab) -->
+    <string name="buttonInstantPurchase">🎰 Buy Now</string>
+    <string name="buttonExtraPurchase">➕ Buy More</string>
+    <string name="instantNotSaleTime">Outside sale hours</string>
+    <string name="instantConfirmTitle">Instant Purchase</string>
+    <string name="instantConfirmBody">Round %1$d · %2$d game(s) · ₩%3$s\nBuy now?</string>
+    <string name="extraPickTitle">Buy More (Auto)</string>
+    <string name="extraPickBody">Choose how many auto games (group and number both auto) to buy. Requests over the weekly limit (5 games) are rejected by the server.</string>
+    <string name="instantInProgress">Purchasing…</string>
+    <string name="instantSuccessTitle">🎰 Purchase Complete!</string>
+    <string name="instantSuccessBody">Round %1$d · %2$d game(s)</string>
+    <string name="instantNoTickets">Your chosen numbers were already sold, so nothing was bought under the \'give up\' policy.</string>
+    <string name="instantErrorTitle">Purchase Failed</string>
+    <string name="instantUnknownResult">Your purchase may have gone through.\nCheck the History tab before trying again.</string>
+    <string name="instantAlreadyPurchased">This round was just purchased. Use Buy More instead.</string>
+    <string name="instantRoundChanged">The round has changed, so the purchase was cancelled. Please review again.</string>
+    <string name="instantErrorFallback">Purchase failed. Please try again.</string>
+    <string name="instantNeedsSetup">Set up and save your group and numbers before buying.</string>
+    <string name="instantGuardSaveFailed">Purchase succeeded, but saving the round record failed. To avoid a double charge, please check your scheduled auto-purchase setting and your purchase history.</string>
 </resources>

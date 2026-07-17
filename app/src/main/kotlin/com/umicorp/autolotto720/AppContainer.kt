@@ -10,12 +10,17 @@ import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.SecureStore
 import com.umicorp.autolotto720.data.Slot720
 import com.umicorp.autolotto720.dhlottery.AuthService
+import com.umicorp.autolotto720.dhlottery.DhlotteryException
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
+import com.umicorp.autolotto720.dhlottery.Feature720
 import com.umicorp.autolotto720.dhlottery.HistoryService720
+import com.umicorp.autolotto720.dhlottery.PurchaseResult720
 import com.umicorp.autolotto720.dhlottery.PurchaseService720
 import com.umicorp.autolotto720.dhlottery.ResultService720
+import com.umicorp.autolotto720.dhlottery.Round720
 import com.umicorp.autolotto720.scheduler.AlarmScheduler
 import com.umicorp.autolotto720.scheduler.BalanceAlert
+import com.umicorp.autolotto720.scheduler.PurchaseLock
 import com.umicorp.autolotto720.update.AppUpdater
 import com.umicorp.autolotto720.update.UpdateInfo
 import java.io.File
@@ -26,8 +31,12 @@ import com.umicorp.autolotto720.ui.vm.SettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.time.ZonedDateTime
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * 앱 스코프 컴포지션 루트 (원본 Riverpod `ProviderScope` + 전역 프로바이더 대응).
@@ -94,6 +103,10 @@ class AppContainer(context: Context) {
     private val _loggedInUserId = MutableStateFlow<String?>(null)
     val loggedInUserId: StateFlow<String?> = _loggedInUserId.asStateFlow()
 
+    /** 마지막 구매 회차(멱등 가드) — 즉시 구매 CTA 모드(첫/추가) 분기의 단일 출처. */
+    private val _lastPurchasedRound = MutableStateFlow(0)
+    val lastPurchasedRound: StateFlow<Int> = _lastPurchasedRound.asStateFlow()
+
     // === 인앱 업데이트 (사이드로드 배포) ===
     private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
     val updateInfo: StateFlow<UpdateInfo?> = _updateInfo.asStateFlow()
@@ -114,7 +127,14 @@ class AppContainer(context: Context) {
         _balanceAlertEnabled.value = store.getBalanceAlertEnabled()
         _balanceAlertThreshold.value = store.getBalanceAlertThreshold()
         _language.value = store.getLanguage()
-        _loggedInUserId.value = store.getCredentials().userId
+        val currentUser = store.getCredentials().userId
+        _loggedInUserId.value = currentUser
+        // G1 마이그레이션: 소유 계정 키 신설 이전 기록은 owner=null → 현재 계정으로 1회 스탬프(레거시=기기스코프 복원, 중복결제 방지).
+        val recordedRound = store.getLastPurchasedRound()
+        if (shouldBackfillOwner(recordedRound, store.getLastPurchaseOwner(), currentUser)) {
+            store.setLastPurchase(recordedRound, currentUser!!)
+        }
+        _lastPurchasedRound.value = accountScopedRound(recordedRound, store.getLastPurchaseOwner(), currentUser)
         // 앱 실행마다 알람 재무장(자동구매 활성 시). 업데이트·강제종료·OEM 정리로 소실된 알람 복구 — 멱등.
         scheduler.rescheduleAll()
     }
@@ -158,9 +178,13 @@ class AppContainer(context: Context) {
     /** 수동 로그인(설정 화면). 실패 시 throw(INVALID_CREDENTIALS 등) — 호출자가 매핑. 잔액알림은 안 함(원본과 동일). */
     suspend fun login(id: String, pw: String) {
         auth.login(id, pw)
-        store.saveCredentials(id, pw)
+        // 자격증명 커밋은 구매 임계구역과 직렬화(PurchaseLock) — 워커/즉시구매의 자격증명 읽기와 경합 방지.
+        PurchaseLock.mutex.withLock { store.saveCredentials(id, pw) }
         _isLoggedIn.value = true
         _loggedInUserId.value = id
+        // 회차 가드는 계정 스코프 — 기록은 건드리지 않고 판정 시점에 소유 계정으로 대조한다([accountScopedRound]).
+        // 다른 계정 로그인 시 이 계정 기준 0(=미구매), 같은 계정 재로그인 시 기록 보존.
+        _lastPurchasedRound.value = accountScopedRound(store.getLastPurchasedRound(), store.getLastPurchaseOwner(), id)
         _balance.value = auth.getBalance()
     }
 
@@ -202,14 +226,106 @@ class AppContainer(context: Context) {
      */
     fun debugResetPurchasedRound(): String {
         store.setLastPurchasedRound(0)
+        _lastPurchasedRound.value = 0   // 즉시 구매 CTA(첫/추가 분기)도 같이 되돌린다.
         return "회차기록 리셋됨 — 다음 예약 워커 실행 시 이번 회차를 실제 구매합니다"
     }
 
-    /** 잔액 재조회 + 잔액부족 체크(원본 home/_refreshBalance). */
-    suspend fun refreshBalance() {
-        val b = auth.getBalance()
+    /** 잔액 재조회 + 잔액부족 체크(원본 home/_refreshBalance). [from]=즉시구매 전용 세션 등 다른 로그인 세션 지정용. */
+    suspend fun refreshBalance(from: AuthService = auth) {
+        val b = from.getBalance()
         _balance.value = b
         BalanceAlert.checkAndNotify(appContext, b, _balanceAlertEnabled.value, _balanceAlertThreshold.value)
+    }
+
+    /** 워커가 백그라운드에서 회차를 갱신했을 수 있어 즉시 구매 CTA 탭 때 재읽기(계정 스코프). */
+    suspend fun refreshLastPurchasedRound() = withContext(Dispatchers.IO) {
+        _lastPurchasedRound.value =
+            accountScopedRound(store.getLastPurchasedRound(), store.getLastPurchaseOwner(), store.getCredentials().userId)
+    }
+
+    // === 즉시 구매 (번호 탭 CTA — 645 docs/DESIGN-instant-purchase.md의 720 포트) ===
+
+    /** 구매 요청 후 결과를 확인 못 한 실패(네트워크·타임아웃) — 재시도 유도 금지 신호. */
+    class PurchaseResultUnknownException(cause: Throwable) : Exception(cause)
+
+    /** 확정 다이얼로그가 표시한 회차와 실제 회차가 달라 구매 없이 중단한 경우. */
+    class RoundChangedException : Exception()
+
+    /** Mutex 획득 시점에 판매시간이 종료되어 구매 없이 중단한 경우(락 대기 중 경계 통과). */
+    class SaleClosedException : Exception()
+
+    /** 결제는 성공했으나 로컬 회차 가드 영속화(commit)에 실패한 경우 — 결과를 실어 성공(경고)로 표시한다. */
+    class PurchaseRecordFailedException(val result: PurchaseResult720) : Exception()
+
+    /**
+     * 즉시 구매. [expectedRound]는 확정 다이얼로그가 표시한 회차 — Mutex 안에서 현재 회차와 대조해
+     * 다르면 [RoundChangedException](구매 요청 없음, 표시≠결제 방지). [extra]=false(첫 구매:
+     * 저장된 [config] 슬롯 그대로 — 조/번호 지정 포함)는 회차 가드 재판정 후 이미 구매된 회차면
+     * null(= "방금 구매됨"), [extra]=true(추가: 완전자동 [autoGames]게임)는 가드로 막지 않는다
+     * (서버 주간한도가 방어선). 세션 만료 대비 매번 재로그인(워커 패턴). 성공 응답 관측 즉시 성공 확정 —
+     * 회차+계정 기록 실패가 성공 결과를 가리면 재시도를 오유도하므로 runCatching. 잔액 갱신은 락 밖(실패 무시).
+     */
+    suspend fun instantPurchase(
+        extra: Boolean,
+        expectedRound: Int,
+        autoGames: Int,
+        config: NumberConfig720?,
+    ): PurchaseResult720? {
+        // 방어적 kill switch — 워커와 대칭(F2). 계약이 깨져 게이트를 내리면 실결제 경로를 CTA 게이트와 이중으로 막는다.
+        check(Feature720.PURCHASE_ENABLED) { "instant purchase is gated off" }
+        // 즉시 구매 전용 세션(F5) — 공유 auth/session은 수동 login()/logout()이 PurchaseLock 밖에서 변이하므로
+        // 구매 중 세션이 덮일 수 있다. 워커와 동일하게 자체 세션으로 격리해 경합을 원천 차단한다.
+        val purchaseSession = DhlotterySession()
+        val purchaseAuth = AuthService(purchaseSession)
+        val result = PurchaseLock.mutex.withLock {
+            // 락 대기 중 판매 마감·회차 경계를 넘었을 수 있어 게이트 전부를 락 안에서 재평가.
+            val now = ZonedDateTime.now(Round720.KST)
+            val saleOpen = SettingsViewModel.isValidPurchaseTime(now.dayOfWeek.value, now.hour, now.minute)
+            val round = Round720.getUpcomingDrawRound(now)
+            // 자격증명·로컬 검증은 네트워크 이전 — purchase try 밖(아래)에서 평가해 "결과 불명" 오분류를 막는다(F9).
+            val cred = store.getCredentials()
+            val id = requireNotNull(cred.userId) { "로그인이 필요합니다." }
+            val pw = requireNotNull(cred.password) { "로그인이 필요합니다." }
+            // 회차 가드는 계정 스코프(F4) — 다른 계정 기록이면 이 계정 기준 미구매(0). A→B→A 단일 슬롯 한계는 수용(주석).
+            val recorded = accountScopedRound(store.getLastPurchasedRound(), store.getLastPurchaseOwner(), id)
+            _lastPurchasedRound.value = recorded
+            when (purchaseGate(extra, recorded, round, expectedRound, saleOpen)) {
+                PurchaseGate.SALE_CLOSED -> throw SaleClosedException()
+                PurchaseGate.ROUND_CHANGED -> throw RoundChangedException()
+                PurchaseGate.ALREADY_PURCHASED -> return@withLock null  // 워커 선점 — 이미 구매됨
+                PurchaseGate.PROCEED -> Unit
+            }
+
+            purchaseAuth.login(id, pw)                              // 세션 만료 대비 매번 재로그인(워커 패턴)
+
+            val svc = PurchaseService720(purchaseAuth, purchaseSession)
+            val cfg = if (extra) null else requireNotNull(config) { "구매할 게임 설정이 없습니다." }
+            val r = try {
+                // 추가 구매는 조·번호 모두 자동(완전자동) N게임 — 저장된 수동 번호 중복 구매 방지.
+                if (extra) svc.purchase(games = autoGames) else svc.purchase(cfg!!)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e             // 취소는 재래핑 금지(구조적 동시성, F1)
+                // 720 서비스는 결과 불명도 DhlotteryException으로 던진다 — 오분류는 중복 결제 위험(F14로 분리).
+                throw when (val f = classifyPurchaseFailure(e)) {
+                    is PurchaseFailure.Rejected -> f.cause                        // 서버 확정 거절 — 메시지 그대로(재시도 안전)
+                    is PurchaseFailure.Unknown -> PurchaseResultUnknownException(f.cause)  // 결과 불명 — 재시도 유도 금지
+                }
+            }
+            // 성공 확정 — 결제는 됨. 필수 보상(가드 기록·실패 시 예약중단)은 취소 불가 구간에서 — CE가 끊지 못하게 한다(G3, F3).
+            withContext(NonCancellable) {
+                _lastPurchasedRound.value = r.round                      // 인메모리 가드(이 세션 CTA 보호)
+                val committed = runCatching { store.setLastPurchase(r.round, id) }.getOrDefault(false)
+                if (!committed) {
+                    // 디스크 가드 미기록 → 워커 재구매 가능. 예약 자동구매 중단 시도(성공 여부와 무관하게 UI는 확인 유도, 단정 금지).
+                    runCatching { setAutoEnabled(false) }
+                    throw PurchaseRecordFailedException(r)               // 결제 성공은 유지(재결제 문구 금지)
+                }
+            }
+            r
+        } ?: return null
+        // 잔액 갱신은 락 밖 — 전용 세션(방금 로그인)으로 조회해 공유 세션 만료와 무관하게 정확. 실패해도 성공 표시 유지.
+        runCatching { refreshBalance(purchaseAuth) }.onFailure { if (it is CancellationException) throw it }
+        return result
     }
 
     // === 자동구매 설정 (write-through: 플로우 + SecureStore + 알람) ===
@@ -312,6 +428,7 @@ class AppContainer(context: Context) {
         _balanceAlertEnabled.value = false
         _balanceAlertThreshold.value = 5000
         _loggedInUserId.value = null
+        _lastPurchasedRound.value = 0   // clearAll이 회차·소유 계정 기록도 지운다 — 플로우를 stale로 두지 않는다.
     }
 
     /** 화면별 ViewModel 팩토리(컴포지션 루트가 컨테이너 주입). */
@@ -340,3 +457,54 @@ class AutoLotto720Application : Application() {
 /** Compose/Activity에서 앱 스코프 컨테이너 접근. */
 val Context.appContainer: AppContainer
     get() = (applicationContext as AutoLotto720Application).container
+
+/**
+ * 실패 2분류(순수) — 720 `PurchaseService720`는 645와 달리 **결과 불명**(비-JSON/복호화 실패 응답,
+ * 미지 resultCode)도 `DhlotteryException`으로 던진다. 그 메시지에 심긴 "결과 불명" 표식을 보고
+ * 서버 확정 거절(재시도 안전)과 결과 불명(재시도 유도 금지)을 가른다 — 비멱등 connPro 뒤일 수 있어
+ * 오분류는 곧 중복 결제 위험. 서비스가 문구를 바꿔도 이 표식은 유지해야 한다
+ * (`PurchaseService720Test`의 "html error response treated as unknown result"가 서비스 쪽을 고정).
+ */
+fun isUnknownResultMessage(message: String?): Boolean = message?.contains("결과 불명") == true
+
+/** 실패 2분류 결과(순수) — [Rejected]=서버 확정 거절(재시도 안전), [Unknown]=결과 불명(재시도 유도 금지). */
+sealed interface PurchaseFailure {
+    val cause: Throwable
+    data class Rejected(override val cause: Throwable) : PurchaseFailure
+    data class Unknown(override val cause: Throwable) : PurchaseFailure
+}
+
+/**
+ * 구매 실패를 재시도 안전(Rejected)/금지(Unknown)로 가르는 순수 함수(F14).
+ * 720 `PurchaseService720`는 645와 달리 결과 불명도 `DhlotteryException`으로 던지므로,
+ * DhlotteryException이면서 "결과 불명" 표식이 **없을 때만** 확정 거절(Rejected)로 본다.
+ * 그 외(표식 있는 DhlotteryException, 비-DhlotteryException 전부)는 비멱등 connPro 뒤일 수 있어 Unknown.
+ */
+fun classifyPurchaseFailure(e: Throwable): PurchaseFailure = when {
+    e is DhlotteryException && !isUnknownResultMessage(e.message) -> PurchaseFailure.Rejected(e)
+    else -> PurchaseFailure.Unknown(e)
+}
+
+/**
+ * 계정 스코프 회차 가드(순수, F4) — 기록 소유자가 현재 계정과 다르면 0(=이 계정 미구매)으로 본다.
+ * 로그인 시 기록을 리셋하지 않고 판정 시점에 대조 → 계정 A→B→A에서 A 자기 가드가 지워지던 홀을 막는다.
+ * owner=null은 **레거시 기록**(소유 계정 키 신설 이전) — 기기 스코프였던 원 동작대로 현재 계정 것으로 신뢰한다.
+ * 엄격 비교로 0을 주면 업데이트 직후 이미 구매한 회차를 다시 사 중복결제(G1). loadSettings 백필이 이후 스탬프한다.
+ * 단일 슬롯 한계: A→B(구매)→A는 B가 슬롯을 덮어 여전히 못 막는다("autolotto 정책 그대로" 수용).
+ */
+fun accountScopedRound(recordedRound: Int, recordedOwner: String?, currentUserId: String?): Int =
+    if (currentUserId != null && (recordedOwner == null || recordedOwner == currentUserId)) recordedRound else 0
+
+/** G1 백필 판정(순수) — 레거시(owner 없는) 회차 기록이 있고 로그인돼 있으면 현재 계정으로 1회 스탬프한다. */
+fun shouldBackfillOwner(recordedRound: Int, recordedOwner: String?, currentUserId: String?): Boolean =
+    recordedRound > 0 && recordedOwner == null && currentUserId != null
+
+/** Mutex 내 구매 게이트(순수) — 판매 종료·회차 변경은 모드 공통 중단, 회차 가드는 첫 구매에만. */
+enum class PurchaseGate { PROCEED, ALREADY_PURCHASED, ROUND_CHANGED, SALE_CLOSED }
+
+fun purchaseGate(extra: Boolean, recordedRound: Int, currentRound: Int, expectedRound: Int, saleOpen: Boolean): PurchaseGate = when {
+    !saleOpen -> PurchaseGate.SALE_CLOSED
+    currentRound != expectedRound -> PurchaseGate.ROUND_CHANGED
+    !extra && recordedRound >= currentRound -> PurchaseGate.ALREADY_PURCHASED
+    else -> PurchaseGate.PROCEED
+}

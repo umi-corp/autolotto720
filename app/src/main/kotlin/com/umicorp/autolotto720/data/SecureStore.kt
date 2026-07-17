@@ -28,6 +28,9 @@ object SecureKeys {
     /** 네이티브 전용(Flutter에 없던 키) — 자동구매 중복 결제 방지용 마지막 구매 회차. ALL(이관 목록) 미포함. */
     const val LAST_PURCHASED_ROUND = "last_purchased_round"
 
+    /** [LAST_PURCHASED_ROUND]를 기록한 계정 ID — 계정 전환 시 남의 회차 가드로 막히지 않게 스코프를 준다. ALL 미포함. */
+    const val LAST_PURCHASE_OWNER = "last_purchase_owner"
+
     /** 마이그레이션·일괄 처리용 전체 키 목록. */
     val ALL = listOf(
         USER_ID, PASSWORD, AUTO_ENABLED, AUTO_GAMES, NUMBER_CONFIG,
@@ -158,6 +161,19 @@ class SecureStore(context: Context) {
     fun setLastPurchasedRound(round: Int) = putString(SecureKeys.LAST_PURCHASED_ROUND, round.toString())
 
     fun getLastPurchasedRound(): Int = prefs.getString(SecureKeys.LAST_PURCHASED_ROUND, null)?.toIntOrNull() ?: 0
+
+    /** [LAST_PURCHASED_ROUND]를 기록한 계정 — 회차 가드를 계정 스코프(AppContainer.accountScopedRound)로 판정. */
+    fun getLastPurchaseOwner(): String? = prefs.getString(SecureKeys.LAST_PURCHASE_OWNER, null)
+
+    /**
+     * (회차, 소유 계정)을 **한 Editor·한 commit()으로 원자 저장** — 부분 기록(회차만/소유만) 방지.
+     * commit() 반환값을 그대로 돌려주어(비동기 apply 아님) 호출부가 영속 성공을 확인할 수 있게 한다.
+     */
+    fun setLastPurchase(round: Int, userId: String): Boolean =
+        prefs.edit()
+            .putString(SecureKeys.LAST_PURCHASED_ROUND, round.toString())
+            .putString(SecureKeys.LAST_PURCHASE_OWNER, userId)
+            .commit()
 
     // === 전체 초기화 ===
 

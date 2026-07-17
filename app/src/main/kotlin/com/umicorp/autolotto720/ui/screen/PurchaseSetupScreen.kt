@@ -56,7 +56,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -73,6 +75,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -105,11 +108,15 @@ import com.umicorp.autolotto720.R
 import com.umicorp.autolotto720.data.FallbackPolicy
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.Slot720
+import com.umicorp.autolotto720.dhlottery.Feature720
 import com.umicorp.autolotto720.ui.appViewModel
 import com.umicorp.autolotto720.ui.theme.LgAmber
 import com.umicorp.autolotto720.ui.theme.LgTeal
 import com.umicorp.autolotto720.ui.theme.MotionSpecs
+import com.umicorp.autolotto720.ui.util.formatNumber
+import com.umicorp.autolotto720.ui.util.localizedJoLabel
 import com.umicorp.autolotto720.ui.vm.PurchaseSetupViewModel
+import com.umicorp.autolotto720.ui.vm.PurchaseSetupViewModel.InstantState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -140,13 +147,17 @@ private val DigitsSaver: Saver<SnapshotStateList<Int?>, ArrayList<Int>> = Saver(
  * 조 선택기·자동/수동 토글·자리별 슬롯릴·게임요약·폴백정책·저장 색전환을 부모(로또) 번호 탭에서 차용하되
  * 입력 단위를 연금 규격(조 1~5 + 6자리)으로 교체했다.
  *
- * **저장 ≠ 구매**: `Feature720.PURCHASE_ENABLED`=false 게이트를 유지하고, 설정 저장은 자동구매를
- * 무장하지 않는다(§9). 상단 배너로 "준비 중"을 명시한다. 자동구매 on/off 토글은 설정 탭에만 둔다.
+ * **저장 ≠ 구매**: 설정 저장은 예약 자동구매를 무장하지 않는다(§9) — 자동구매 on/off 토글은 설정 탭에만 둔다.
+ * 저장 버튼 아래 **즉시 구매 CTA**만이 사용자가 이 화면에서 실결제를 개시하는 유일한 경로이며, 확인
+ * 다이얼로그(원탭 결제 금지)·판매시간/회차 게이트·구매 Mutex를 거친다(645 docs/DESIGN-instant-purchase.md 포트).
  */
 @Composable
 fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
     val vm: PurchaseSetupViewModel = appViewModel()
     val config by vm.config.collectAsState()
+    val isLoggedIn by vm.isLoggedIn.collectAsState()
+    val lastRound by vm.lastPurchasedRound.collectAsState()
+    val instantState by vm.instantState.collectAsState()
 
     // committed: 저장/구매 대상 5슬롯(§3 타입). draft: 현재 슬롯의 미확정 편집 상태.
     // rememberSaveable — 확정본·draft가 프로세스 사망에도 살아남는다(확정≠저장, 영속 store와 별개).
@@ -201,6 +212,16 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
             if (config.revision > 0L || config.slots.any { it != Slot720.Unset }) initialized = true
         }
     }
+
+    // 즉시 구매: 저장된 게임 0개면 설정·저장 안내(이미 이 화면이므로 이동 없이 스낵바).
+    // 스낵바는 scope로 분리 — dismiss가 상태를 바꿔 이 이펙트가 재시작(=취소)돼도 표시가 살아남는다.
+    LaunchedEffect(instantState) {
+        if (instantState is PurchaseSetupViewModel.InstantState.NeedsSetup) {
+            scope.launch { snackbar.showSnackbar(context.getString(R.string.instantNeedsSetup)) }
+            vm.dismissInstant()
+        }
+    }
+    InstantPurchaseDialogs(instantState, vm)
 
     // draft → committed 매핑(§4). null이면 확정 불가(수동 6자리 미완성 등).
     fun draftToSlot(): Slot720? = when {
@@ -480,6 +501,24 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                             else -> stringResource(R.string.buttonSaveGames, gameCount)
                         },
                         fontWeight = FontWeight.Bold,
+                    )
+                }
+                // 즉시 구매 CTA는 실결제 경로 — 구매 게이트가 내려가면(계약 파기 kill switch) 아예 노출하지 않는다(F2).
+                if (Feature720.PURCHASE_ENABLED) {
+                    Spacer(Modifier.height(12.dp))
+                    // 즉시 구매 — 저장된 조·번호로 지금 결제(설정 → 저장 → 구매 흐름). 미저장 변경은 저장 유도.
+                    InstantPurchaseCta(
+                        isLoggedIn = isLoggedIn,
+                        purchasedThisRound = lastRound >= vm.currentRound,
+                        saleOpen = vm.isSaleOpenNow(),
+                        onTap = {
+                            // 저장 상태 요구는 첫 구매만 — 추가 구매(자동 N게임)는 저장 슬롯을 쓰지 않는다.
+                            if (!saved && lastRound < vm.currentRound) {
+                                scope.launch { snackbar.showSnackbar(context.getString(R.string.instantNeedsSetup)) }
+                            } else {
+                                vm.onInstantTap()
+                            }
+                        },
                     )
                 }
                 Spacer(Modifier.height(24.dp))
@@ -1050,4 +1089,166 @@ private fun FallbackRow(text: String, selected: Boolean, enabled: Boolean, onCli
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
         )
     }
+}
+
+/** 즉시 구매 프라이머리 CTA. 비활성 사유(로그인 > 판매시간)를 라벨로 표시, 구매완료 회차엔 "추가 구매". */
+@Composable
+private fun InstantPurchaseCta(
+    isLoggedIn: Boolean,
+    purchasedThisRound: Boolean,
+    saleOpen: Boolean,
+    onTap: () -> Unit,
+) {
+    val disabledLabel = when {
+        !isLoggedIn -> stringResource(R.string.hintLoginRequired)
+        !saleOpen -> stringResource(R.string.instantNotSaleTime)
+        else -> null
+    }
+    CtaButton(onClick = onTap, enabled = disabledLabel == null) {
+        Text(
+            disabledLabel ?: stringResource(
+                if (purchasedThisRound) R.string.buttonExtraPurchase else R.string.buttonInstantPurchase,
+            ),
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+/** 즉시 구매 다이얼로그 — InstantState별 확인/게임수선택/진행/결과/에러. */
+@Composable
+private fun InstantPurchaseDialogs(state: InstantState, vm: PurchaseSetupViewModel) {
+    when (state) {
+        is InstantState.ConfirmingFirst -> AlertDialog(
+            onDismissRequest = { vm.dismissInstant() },
+            title = { Text(stringResource(R.string.instantConfirmTitle)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.instantConfirmBody,
+                        state.round, state.games, formatNumber(state.games * 1000),
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.confirmFirst() }) { Text(stringResource(R.string.buttonConfirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissInstant() }) { Text(stringResource(R.string.buttonCancel)) }
+            },
+        )
+        is InstantState.PickingExtra -> {
+            var games by rememberSaveable { mutableIntStateOf(1) }   // 회전 시 선택 게임수 유지(F10)
+            AlertDialog(
+                onDismissRequest = { vm.dismissInstant() },
+                title = { Text(stringResource(R.string.extraPickTitle)) },
+                text = {
+                    Column {
+                        Text(stringResource(R.string.extraPickBody), style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            (1..5).forEach { n ->
+                                FilterChip(selected = games == n, onClick = { games = n }, label = { Text("$n") })
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            stringResource(
+                                R.string.instantConfirmBody,
+                                state.round, games, formatNumber(games * 1000),
+                            ),
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { vm.confirmExtra(games) }) { Text(stringResource(R.string.buttonConfirm)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { vm.dismissInstant() }) { Text(stringResource(R.string.buttonCancel)) }
+                },
+            )
+        }
+        is InstantState.InProgress -> AlertDialog(
+            onDismissRequest = {},                                  // 진행 중 닫기 금지
+            title = { Text(stringResource(R.string.instantConfirmTitle)) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(stringResource(R.string.instantInProgress))
+                }
+            },
+            confirmButton = {},
+        )
+        is InstantState.Success -> AlertDialog(
+            onDismissRequest = { vm.dismissInstant() },
+            title = { Text(stringResource(R.string.instantSuccessTitle)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.instantSuccessBody, state.result.round, state.result.tickets.size))
+                    Spacer(Modifier.height(12.dp))
+                    // 지정번호 점유 + '구매 포기' 정책이면 산 게임이 0 — 오류가 아니라 정책상 정상 결과.
+                    if (state.result.tickets.isEmpty()) {
+                        Text(stringResource(R.string.instantNoTickets), style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        state.result.tickets.forEach { t ->
+                            JoNumberDisplay(
+                                joLabel = localizedJoLabel(t.jo),
+                                number = t.number,
+                                modifier = Modifier.padding(vertical = 2.dp),
+                            )
+                        }
+                    }
+                    // 결제는 성공했으나 로컬 회차 가드 저장 실패 — 예약 자동구매를 중단했음을 경고(F3).
+                    if (!state.guardSaved) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            stringResource(R.string.instantGuardSaveFailed),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.dismissInstant() }) { Text(stringResource(R.string.buttonConfirm)) }
+            },
+        )
+        is InstantState.AlreadyPurchased -> InstantNoticeDialog(
+            title = stringResource(R.string.instantConfirmTitle),
+            text = stringResource(R.string.instantAlreadyPurchased),
+            onDismiss = { vm.dismissInstant() },
+        )
+        is InstantState.SaleClosed -> InstantNoticeDialog(
+            title = stringResource(R.string.instantConfirmTitle),
+            text = stringResource(R.string.instantNotSaleTime),
+            onDismiss = { vm.dismissInstant() },
+        )
+        is InstantState.RoundChanged -> InstantNoticeDialog(
+            title = stringResource(R.string.instantConfirmTitle),
+            text = stringResource(R.string.instantRoundChanged),
+            onDismiss = { vm.dismissInstant() },
+        )
+        is InstantState.Error -> InstantNoticeDialog(
+            title = stringResource(R.string.instantErrorTitle),
+            text = if (state.unknown) stringResource(R.string.instantUnknownResult)
+            else state.message ?: stringResource(R.string.instantErrorFallback),
+            onDismiss = { vm.dismissInstant() },
+        )
+        InstantState.Idle, InstantState.NeedsSetup -> Unit
+    }
+}
+
+/** 공지성 다이얼로그 공통 스켈레톤(제목·본문·확인 버튼) — 상태별 문구만 다르다. */
+@Composable
+private fun InstantNoticeDialog(title: String, text: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(text) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttonConfirm)) }
+        },
+    )
 }

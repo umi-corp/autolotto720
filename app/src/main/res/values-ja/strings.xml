@@ -211,4 +211,24 @@
     <string name="buttonUpdateNow">アップデート</string>
     <string name="buttonUpdateLater">後で</string>
     <string name="updateDownloading">ダウンロード中…</string>
+
+    <!-- 即時購入(番号タブの保存ボタン下のCTA) -->
+    <string name="buttonInstantPurchase">🎰 今すぐ購入</string>
+    <string name="buttonExtraPurchase">➕ 追加購入</string>
+    <string name="instantNotSaleTime">現在は販売時間外です</string>
+    <string name="instantConfirmTitle">即時購入</string>
+    <string name="instantConfirmBody">第%1$d回 · %2$dゲーム · ₩%3$s\n今すぐ購入しますか?</string>
+    <string name="extraPickTitle">追加購入 (自動)</string>
+    <string name="extraPickBody">自動(組·番号とも自動)のゲーム数を選択してください。週間上限(5ゲーム)を超えるとサーバーで拒否されます。</string>
+    <string name="instantInProgress">購入中…</string>
+    <string name="instantSuccessTitle">🎰 購入完了!</string>
+    <string name="instantSuccessBody">第%1$d回 · %2$dゲーム</string>
+    <string name="instantNoTickets">指定した番号がすでに販売済みのため、\'購入見送り\'ポリシーにより購入しませんでした。</string>
+    <string name="instantErrorTitle">購入失敗</string>
+    <string name="instantUnknownResult">購入が受け付けられた可能性があります。\n履歴タブで確認してから再試行してください。</string>
+    <string name="instantAlreadyPurchased">この回はたった今購入されました。追加購入をご利用ください。</string>
+    <string name="instantRoundChanged">回が変わったため購入をキャンセルしました。もう一度ご確認ください。</string>
+    <string name="instantErrorFallback">購入に失敗しました。もう一度お試しください。</string>
+    <string name="instantNeedsSetup">先に購入する組·番号を設定して保存してください。</string>
+    <string name="instantGuardSaveFailed">購入は成功しましたが、回次記録の保存に失敗しました。二重決済を防ぐため、予約自動購入の設定と購入履歴をご確認ください。</string>
 </resources>

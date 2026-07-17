@@ -4,15 +4,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umicorp.autolotto720.AppContainer
 import com.umicorp.autolotto720.data.FallbackPolicy
+import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.Slot720
 import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.data.WinningNumbers720
+import com.umicorp.autolotto720.dhlottery.PurchaseResult720
 import com.umicorp.autolotto720.dhlottery.Round720
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.ZonedDateTime
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * 화면별 ViewModel (원본 Riverpod 화면 상태 포트, Task11~14에서 연금복권720+로 전환).
@@ -61,18 +65,21 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    /** 당겨서 새로고침: 당첨번호 + 잔액. */
+    /** 당겨서 새로고침: 당첨번호 + 잔액 + 구매 회차 가드(워커가 백그라운드에서 갱신했을 수 있음 — 설계 명시, F8). */
     fun refreshAll() {
         fetchWinningNumbers()
         viewModelScope.launch { container.refreshBalance() }
+        viewModelScope.launch { container.refreshLastPurchasedRound() }
     }
 }
 
 /**
  * "번호" 탭(수동 게임 설정, 설계 §3~§10): 5슬롯 sealed 상태 + 폴백정책 설정을 저장한다.
- * 720 온라인 구매는 [com.umicorp.autolotto720.dhlottery.Feature720.PURCHASE_ENABLED] 게이트 —
- * 화면은 "준비 중" 배너를 유지하고 자동구매 on/off 스위치를 잠근다. **설정 저장은 허용하되 구매는
- * 게이트**(저장이 구매를 무장하지 않음 — 설계 §9).
+ * **설정 저장은 예약 자동구매를 무장하지 않는다**(저장 ≠ 구매 — 설계 §9).
+ *
+ * 즉시 구매([instantState] 상태머신)는 이와 별개로, 사용자가 CTA를 눌러 확인 다이얼로그까지 통과했을
+ * 때만 실결제를 개시한다(645 docs/DESIGN-instant-purchase.md 포트 — 자동 재시도 없음, 판매시간·회차
+ * 게이트는 탭·확정 두 시점에서 재검증, 최종 판정은 [AppContainer.instantPurchase]의 구매 Mutex 안).
  */
 class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() {
     val autoEnabled = container.autoEnabled
@@ -83,6 +90,118 @@ class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() 
     /** committed 5슬롯+폴백정책 저장(revision 단조 증가). 구매는 활성화하지 않는다. */
     fun saveConfig(slots: List<Slot720>, fallback: FallbackPolicy) {
         viewModelScope.launch { container.saveNumberConfig(slots, fallback) }
+    }
+
+    // === 즉시 구매 (저장 버튼 아래 CTA — 645 docs/DESIGN-instant-purchase.md의 720 포트) ===
+
+    val isLoggedIn = container.isLoggedIn
+    val lastPurchasedRound = container.lastPurchasedRound
+
+    /** 지금 판매 중(=다가오는 추첨)인 회차. CTA 모드(첫/추가) 분기용. */
+    val currentRound: Int get() = Round720.getUpcomingDrawRound()
+
+    /**
+     * 즉시 구매 다이얼로그 상태머신.
+     * Idle → (탭) ConfirmingFirst | PickingExtra | NeedsSetup | SaleClosed
+     *      → (확정) InProgress → Success | AlreadyPurchased | SaleClosed | RoundChanged | Error
+     *      → (닫기) Idle
+     * ConfirmingFirst는 탭 시점 저장 설정 스냅샷을 담아 확인창 표시 내용 = 실제 구매 내용을 보장.
+     */
+    sealed interface InstantState {
+        data object Idle : InstantState
+        data object NeedsSetup : InstantState         // 저장된 게임 0개 — 설정·저장 안내(스낵바)
+        data class ConfirmingFirst(val round: Int, val config: NumberConfig720) : InstantState {
+            val games: Int get() = config.gameCount
+        }
+        data class PickingExtra(val round: Int) : InstantState
+        data object InProgress : InstantState
+        data object AlreadyPurchased : InstantState   // 첫 구매 확정 직전 워커 선점
+        data object SaleClosed : InstantState         // 탭·확정 시점 판매시간 재검증 실패
+        data object RoundChanged : InstantState       // 확정 회차 ≠ 실제 회차 — 구매 없이 취소
+        /** [guardSaved]=false: 결제 성공했으나 로컬 회차 가드 저장 실패 — 예약 자동구매 중단됨(경고 병기). */
+        data class Success(val result: PurchaseResult720, val guardSaved: Boolean = true) : InstantState
+        data class Error(val message: String?, val unknown: Boolean) : InstantState
+    }
+
+    private val _instantState = MutableStateFlow<InstantState>(InstantState.Idle)
+    val instantState: StateFlow<InstantState> = _instantState.asStateFlow()
+
+    /**
+     * 지금(KST)이 판매시간인지 — CTA 표시용. 확정 시점에도 재검증한다.
+     * 720 규칙: 목 17:00~23:59 구매 금지(현 회차는 목 17:00 마감, 다음 회차는 금 00:00 개시) —
+     * [SettingsViewModel.isValidPurchaseTime]→[Round720.isScheduleBlocked] 단일 판정 재사용(645 토/일 규칙 아님).
+     */
+    fun isSaleOpenNow(): Boolean {
+        val now = ZonedDateTime.now(Round720.KST)
+        return SettingsViewModel.isValidPurchaseTime(now.dayOfWeek.value, now.hour, now.minute)
+    }
+
+    /** CTA 탭: 게이트 재검증 후 모드 분기(첫 구매/추가/설정 유도). 저장된 설정 기준. */
+    fun onInstantTap() {
+        if (_instantState.value != InstantState.Idle) return
+        viewModelScope.launch {
+            if (!isSaleOpenNow()) {                                 // 표시가 stale했던 경우 — 사유 표시
+                _instantState.value = InstantState.SaleClosed
+                return@launch
+            }
+            runCatching { container.refreshLastPurchasedRound() }
+                .onFailure { if (it is CancellationException) throw it }
+            val round = Round720.getUpcomingDrawRound()
+            if (container.lastPurchasedRound.value >= round) {
+                _instantState.value = InstantState.PickingExtra(round)
+                return@launch
+            }
+            val saved = container.numberConfig.value
+            _instantState.value = if (saved.gameCount == 0) InstantState.NeedsSetup
+            else InstantState.ConfirmingFirst(round, saved)
+        }
+    }
+
+    /** 첫 구매 확정 — 탭 시점 저장 설정 스냅샷 그대로 실행. 최종 회차·가드 재판정은 컨테이너 Mutex 안. */
+    fun confirmFirst() {
+        val s = _instantState.value as? InstantState.ConfirmingFirst ?: return
+        launchPurchase {
+            container.instantPurchase(extra = false, expectedRound = s.round, autoGames = 0, config = s.config)
+        }
+    }
+
+    /** 추가 구매 확정 — 완전자동(조·번호 자동) [games]게임. 가드로 막지 않음(서버 한도 위임), 회차만 대조. */
+    fun confirmExtra(games: Int) {
+        val s = _instantState.value as? InstantState.PickingExtra ?: return
+        launchPurchase {
+            container.instantPurchase(extra = true, expectedRound = s.round, autoGames = games, config = null)
+        }
+    }
+
+    fun dismissInstant() {
+        if (_instantState.value == InstantState.InProgress) return  // 진행 중 닫기 금지
+        _instantState.value = InstantState.Idle
+    }
+
+    private fun launchPurchase(block: suspend () -> PurchaseResult720?) {
+        if (_instantState.value == InstantState.InProgress) return  // 중복 확정 no-op
+        if (!isSaleOpenNow()) {                                     // 확정 시점 판매시간 재검증
+            _instantState.value = InstantState.SaleClosed
+            return
+        }
+        _instantState.value = InstantState.InProgress
+        viewModelScope.launch {
+            _instantState.value = try {
+                val r = block()
+                if (r == null) InstantState.AlreadyPurchased else InstantState.Success(r)
+            } catch (e: AppContainer.PurchaseRecordFailedException) {
+                InstantState.Success(e.result, guardSaved = false)   // 결제 성공·로컬 가드 저장 실패(예약 자동구매 중단)
+            } catch (e: AppContainer.SaleClosedException) {
+                InstantState.SaleClosed                              // 락 대기 중 판매 종료
+            } catch (e: AppContainer.RoundChangedException) {
+                InstantState.RoundChanged                            // 구매 요청 없이 취소됨
+            } catch (e: AppContainer.PurchaseResultUnknownException) {
+                InstantState.Error(message = null, unknown = true)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e              // 취소는 Error로 오분류하지 않고 전파(F1)
+                InstantState.Error(message = e.message, unknown = false)
+            }
+        }
     }
 }
 
