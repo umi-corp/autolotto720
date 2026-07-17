@@ -31,11 +31,21 @@ object SecureKeys {
     /** [LAST_PURCHASED_ROUND]를 기록한 계정 ID — 계정 전환 시 남의 회차 가드로 막히지 않게 스코프를 준다. ALL 미포함. */
     const val LAST_PURCHASE_OWNER = "last_purchase_owner"
 
+    const val DAILY_BUDGET = "daily_budget"
+    const val WEEKLY_BUDGET = "weekly_budget"
+    /** 지출 원장(JSON): 시도별 {round, epochDay, amount}. 7일 초과 항목은 기록 시 정리. */
+    const val SPEND_LEDGER = "spend_ledger"
+    /** connPro 진입 직전 선기록 — {round, epochDay, amount}. 미결 잔존 시 해당 회차 재결제 차단.
+     *  ponytail: 계정 스코프 없음 — 멀티계정에서 A의 미결 PENDING이 B의 같은 회차 구매를 과차단할 수 있으나
+     *  무결제(안전측)라 수용. 빈발 시 userId를 넣어 계정 일치 시에만 차단으로 승급. */
+    const val PENDING_PURCHASE = "pending_purchase"
+
     /** 마이그레이션·일괄 처리용 전체 키 목록. */
     val ALL = listOf(
         USER_ID, PASSWORD, AUTO_ENABLED, AUTO_GAMES, NUMBER_CONFIG,
         AUTO_PURCHASE_DAY, AUTO_PURCHASE_HOUR, AUTO_PURCHASE_MINUTE, LANGUAGE,
         BALANCE_ALERT_ENABLED, BALANCE_ALERT_THRESHOLD, BALANCE_ALERT_LAST_DATE,
+        DAILY_BUDGET, WEEKLY_BUDGET, SPEND_LEDGER, PENDING_PURCHASE,
     )
 }
 
@@ -174,6 +184,24 @@ class SecureStore(context: Context) {
             .putString(SecureKeys.LAST_PURCHASED_ROUND, round.toString())
             .putString(SecureKeys.LAST_PURCHASE_OWNER, userId)
             .commit()
+
+    // === 예산 한도 (사용자 설정, 원 단위) ===
+
+    fun setDailyBudget(won: Int) = putString(SecureKeys.DAILY_BUDGET, won.toString())
+    fun getDailyBudget(): Int = prefs.getString(SecureKeys.DAILY_BUDGET, null)?.toIntOrNull() ?: 5000
+
+    fun setWeeklyBudget(won: Int) = putString(SecureKeys.WEEKLY_BUDGET, won.toString())
+    fun getWeeklyBudget(): Int = prefs.getString(SecureKeys.WEEKLY_BUDGET, null)?.toIntOrNull() ?: 5000
+
+    // === 지출 원장 / PENDING ===
+
+    fun getSpendLedger(): String? = prefs.getString(SecureKeys.SPEND_LEDGER, null)
+    fun setSpendLedger(json: String): Boolean = prefs.edit().putString(SecureKeys.SPEND_LEDGER, json).commit()
+
+    fun getPendingPurchase(): String? = prefs.getString(SecureKeys.PENDING_PURCHASE, null)
+    /** money-path: commit() 반환으로 영속 성공 확인 — false면 호출부가 결제에 진입하지 않는다. */
+    fun setPendingPurchase(json: String): Boolean = prefs.edit().putString(SecureKeys.PENDING_PURCHASE, json).commit()
+    fun clearPendingPurchase() { prefs.edit().remove(SecureKeys.PENDING_PURCHASE).commit() }
 
     // === 전체 초기화 ===
 
