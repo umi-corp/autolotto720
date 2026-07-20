@@ -130,6 +130,7 @@
     <string name="dhLotteryAccount">동행복권 계정</string>
     <string name="statusLoggedIn">로그인됨</string>
     <string name="statusLoginRequired">로그인 필요</string>
+    <string name="statusConnectRetry">연결 실패 — 탭하여 재시도</string>
     <string name="buttonLogout">로그아웃</string>
     <string name="buttonLogin">로그인</string>
 

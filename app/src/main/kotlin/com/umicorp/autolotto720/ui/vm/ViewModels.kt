@@ -15,7 +15,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZonedDateTime
@@ -34,7 +36,17 @@ import kotlin.coroutines.cancellation.CancellationException
 /** 홈: 카운트다운(목요일 19:05 추첨) + 지난 회차 720 당첨번호 + 잔액/자동구매 상태(공유). */
 class HomeViewModel(private val container: AppContainer) : ViewModel() {
     val isLoggedIn = container.isLoggedIn
+    val autoLoginFailed = container.autoLoginFailed
+    val hydrationFailed = container.hydrationFailed
     val balance = container.balance
+
+    /** amber 클라우드 아이콘 탭 — 설정 하이드레이션·자동 로그인 수동 재시도(공용 복구 경로). */
+    fun retryConnect() {
+        viewModelScope.launch {
+            container.ensureHydrated()
+            container.autoLogin()
+        }
+    }
     val autoEnabled = container.autoEnabled
     val autoPurchaseDay = container.autoPurchaseDay
     val autoPurchaseHour = container.autoPurchaseHour
@@ -87,6 +99,9 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
 class PurchaseSetupViewModel(private val container: AppContainer) : ViewModel() {
     val autoEnabled = container.autoEnabled
     val config = container.numberConfig
+
+    /** 하이드레이션 성공 전 저장 차단용 — 로드 실패 상태의 빈 슬롯이 실데이터를 덮어쓰는 유실 방지. */
+    val hydrated = container.hydrated
 
     fun setAutoEnabled(v: Boolean) { viewModelScope.launch { container.setAutoEnabled(v) } }
 
@@ -273,12 +288,52 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
     private var oldestStart: LocalDate = LocalDate.now()
     private var windowsLoaded = 0
 
-    init { loadHistory() }
+    /** 현재 목록의 주인 계정 — 계정 전환 시 이전 계정 내역 잔존 방지(645 crosscheck 포트). */
+    private var shownUser: String? = null
+
+    /** 진행 중 조회 — 로그아웃·계정 전환 시 취소해 이전 계정 응답의 늦은 반영을 막는다(crosscheck R1 F4). */
+    private var loadJob: Job? = null
+
+    init {
+        // 로그인 전이 관찰: 재로그인 시 자동 복구(빈 목록), 로그아웃·계정 전환 시 목록 초기화.
+        viewModelScope.launch {
+            combine(container.isLoggedIn, container.loggedInUserId) { logged, user -> logged to user }
+                .collect { (logged, user) ->
+                    when {
+                        !logged -> {
+                            shownUser = null
+                            // 목록이 비어 있어도 무조건 — 첫 로드 in-flight 취소가 목적(crosscheck R2 G4).
+                            resetList()
+                        }
+                        // 로그인 직후 userId 발행 전 중간 방출 — 계정 미확정이라 로드하지 않는다
+                        // (userId 방출이 곧 뒤따라 아래 분기로 로드된다). 이중 로드 방지(crosscheck R1 F4).
+                        user == null -> Unit
+                        user != shownUser -> {
+                            shownUser = user
+                            resetList()
+                            loadHistory()
+                        }
+                        _tickets.value.isEmpty() && !_loading.value -> loadHistory()
+                    }
+                }
+        }
+    }
+
+    private fun resetList() {
+        // winningNumbers 맵은 계정 무관(공개 데이터)이라 유지 — 회차가 겹치면 재사용된다.
+        loadJob?.cancel()
+        _tickets.value = emptyList()
+        _canLoadMore.value = false
+        _error.value = null   // 이전 계정의 오류 문구 잔존 방지(crosscheck R2)
+        oldestStart = LocalDate.now()
+        windowsLoaded = 0
+    }
 
     /** 첫 3개월 창 로드(새로고침 겸용 — 더 보기로 쌓인 이전 창은 버리고 리셋). */
     fun loadHistory() {
         if (!container.isLoggedIn.value) return
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _loading.value = true
             _error.value = null
             try {
@@ -290,11 +345,14 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
                 windowsLoaded = 1
                 _canLoadMore.value = true
                 fetchWinningNumbers()
+            } catch (e: CancellationException) {
+                throw e   // 계정 전환 취소가 오류 문구로 표시되지 않게(crosscheck R1 F4)
             } catch (e: Exception) {
                 _error.value = e.message  // 5b가 historyLoadError 템플릿으로 로컬라이즈
                 _canLoadMore.value = false
             } finally {
-                _loading.value = false
+                // 취소된 구 Job의 늦은 finally가 새 로드의 스피너를 끄지 않게(crosscheck R3 H3).
+                if (isActive) _loading.value = false
             }
         }
     }
@@ -302,7 +360,7 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
     /** 이전 3개월 창 추가 로드. 실패는 조용히 무시 — 버튼이 남아 재시도 가능. */
     fun loadMore() {
         if (_loading.value || _loadingMore.value || !_canLoadMore.value) return
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             _loadingMore.value = true
             try {
                 val end = oldestStart.minusDays(1)
@@ -315,7 +373,8 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
                 fetchWinningNumbers()
             } catch (_: Exception) {
             } finally {
-                _loadingMore.value = false
+                // 취소된 구 Job의 늦은 finally 가드 — loadHistory와 대칭(crosscheck R3 H3).
+                if (isActive) _loadingMore.value = false
             }
         }
     }

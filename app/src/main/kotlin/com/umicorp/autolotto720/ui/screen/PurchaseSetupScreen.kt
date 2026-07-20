@@ -520,6 +520,9 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
 
                 // 저장 — committed + 폴백 영속. 저장/미저장 색 전환. 저장이 구매를 무장하지 않음(§9).
                 // 저장 완료 색은 645와 동일한 그린 고정 — 720 테마 tertiary(LgGold)는 당첨 강조용이라 쓰지 않는다.
+                // 하이드레이션 성공 전엔 저장 차단 — 설정 로드 실패 상태의 빈 슬롯이 디스크의
+                // 실데이터를 덮어쓰는 유실 방지(645 crosscheck 포트). 복구는 홈 amber 아이콘 탭.
+                val hydrated by vm.hydrated.collectAsState()
                 val dark = isSystemInDarkTheme()
                 val saveContainer by animateColorAsState(
                     if (saved) (if (dark) Color(0xFF9BD97A) else Color(0xFF6FBF3B)) else MaterialTheme.colorScheme.primary,
@@ -548,7 +551,7 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                             }
                         }
                     },
-                    enabled = !locked && !saving,
+                    enabled = !locked && !saving && hydrated,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = saveContainer, contentColor = saveContent),

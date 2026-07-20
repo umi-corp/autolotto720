@@ -123,6 +123,7 @@
     <string name="dhLotteryAccount">DHLottery Account</string>
     <string name="statusLoggedIn">Logged in</string>
     <string name="statusLoginRequired">Login required</string>
+    <string name="statusConnectRetry">Connection failed — tap to retry</string>
     <string name="buttonLogout">Logout</string>
     <string name="buttonLogin">Login</string>
 

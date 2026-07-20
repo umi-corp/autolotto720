@@ -12,6 +12,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,6 +88,8 @@ import java.time.ZonedDateTime
 fun HomeScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Unit) {
     val vm: HomeViewModel = appViewModel()
     val isLoggedIn by vm.isLoggedIn.collectAsState()
+    val autoLoginFailed by vm.autoLoginFailed.collectAsState()
+    val hydrationFailed by vm.hydrationFailed.collectAsState()
     val balance by vm.balance.collectAsState()
     val autoEnabled by vm.autoEnabled.collectAsState()
     val day by vm.autoPurchaseDay.collectAsState()
@@ -105,14 +108,28 @@ fun HomeScreen(modifier: Modifier = Modifier, onNavigateToNumbers: () -> Unit) {
                 title = { Text(stringResource(R.string.appTitle), fontWeight = FontWeight.ExtraBold) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
                 actions = {
+                    // 제3 상태(amber): 자격증명은 있는데 자동 로그인 실패 or 설정 로드 실패 —
+                    // 조용한 '로그인 풀림'과 구분해 탭으로 즉시 복구(645 사용자 제보 대응 포트).
+                    val connectIssue = hydrationFailed || (!isLoggedIn && autoLoginFailed)
                     Icon(
                         imageVector = if (isLoggedIn) Icons.Rounded.CloudDone else Icons.Rounded.CloudOff,
                         contentDescription = stringResource(
-                            if (isLoggedIn) R.string.statusLoggedIn else R.string.statusLoginRequired,
+                            // connectIssue 우선 — 로그인 성공+설정 로드 실패도 amber로 표시해야
+                            // 탭 타깃(재시도)과 시각 상태가 일치한다.
+                            when {
+                                connectIssue -> R.string.statusConnectRetry
+                                isLoggedIn -> R.string.statusLoggedIn
+                                else -> R.string.statusLoginRequired
+                            },
                         ),
-                        tint = if (isLoggedIn) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = 16.dp),
+                        tint = when {
+                            connectIssue -> LgAmber
+                            isLoggedIn -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier
+                            .padding(end = 16.dp)
+                            .then(if (connectIssue) Modifier.clickable { vm.retryConnect() } else Modifier),
                     )
                 },
             )

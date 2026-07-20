@@ -71,6 +71,18 @@ class DomainCookieStore {
     @Synchronized
     fun hasCookie(name: String): Boolean = domainCookies.values.any { it.containsKey(name) }
 
+    /** 로그인 실패 복원용 스냅샷 — 중첩 맵까지 깊은 복사(이후 store/clear에 오염되지 않게).
+     *  frozen은 대상 밖 — 공유 세션 로그인 시점엔 구매 freeze 창이 없다(구매는 전용 세션). */
+    @Synchronized
+    fun snapshot(): Map<String, Map<String, String>> = domainCookies.mapValues { LinkedHashMap(it.value) }
+
+    /** 스냅샷으로 전체 교체 복원 — 실패한 로그인 시도 중 유입된 쿠키를 남기지 않는다. */
+    @Synchronized
+    fun restore(snapshot: Map<String, Map<String, String>>) {
+        domainCookies.clear()
+        for ((domain, cookies) in snapshot) domainCookies[domain] = LinkedHashMap(cookies)
+    }
+
     /** [host]에 전송될 쿠키 중 [name]의 값 (도메인 매칭 규칙은 [cookieHeader]와 동일). 없으면 null.
      *  720 구매 암호화 passphrase(el JSESSIONID) 조회용 — el 세션과 www 세션의 JSESSIONID가 다를 수 있어
      *  전역이 아닌 host 기준으로 정확히 뽑아야 한다. */

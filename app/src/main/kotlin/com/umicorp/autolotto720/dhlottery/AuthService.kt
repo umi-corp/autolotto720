@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URLEncoder
+import kotlin.coroutines.cancellation.CancellationException
 
 class DhlotteryException(message: String) : Exception(message)
 
@@ -22,9 +23,13 @@ class AuthService(private val session: DhlotterySession) {
         private set
 
     suspend fun login(userId: String, password: String): Boolean = withContext(Dispatchers.IO) {
+        // 비파괴 로그인(645 crosscheck 포트): 재로그인 실패가 직전까지 유효하던 세션을 파괴하지 않게
+        // 진입 상태를 떠 두고 실패 시 복원한다. 동시성 직렬화는 호출자(AppContainer.loginMutex) 책임.
+        val prevCookies = session.cookies.snapshot()
+        val prevLoggedIn = isLoggedIn
         try {
             session.cookies.clear()
-            isLoggedIn = false // 중간 실패 시 좀비 세션 방지 (원본 catch의 _isLoggedIn=false와 동일 효과)
+            isLoggedIn = false
 
             // 1. 메인 / 2. 로그인 페이지 (Dart: 리다이렉트 추적)
             session.get(session.baseUrl, follow = true).close()
@@ -68,27 +73,50 @@ class AuthService(private val session: DhlotterySession) {
             session.get(session.base(ApiConstants.MAIN)).close()
             session.get(session.ol(ApiConstants.GAME720), follow = true).close()
 
-            // 6. 검증 (mypage 200이면 성공)
+            // 6. 검증 (mypage 200이면 성공). 네트워크 예외는 전파 = 일시 장애 —
+            // 자격증명 거절(INVALID_CREDENTIALS)과 구분해야 재시도 정책이 역전되지 않는다.
             val verified = verifyLogin()
             isLoggedIn = verified
             if (!verified) throw DhlotteryException("INVALID_CREDENTIALS")
             true
         } catch (e: Exception) {
-            isLoggedIn = false
+            session.cookies.restore(prevCookies)
+            isLoggedIn = prevLoggedIn
             throw e
         }
     }
 
-    /** mypage 200 여부로 검증. 리다이렉트 추적 안 함(302 ≠ 성공). */
-    private fun verifyLogin(): Boolean = try {
+    /**
+     * 잔존 세션의 서버측 유효성 재확인 — 만료 확인(비200 응답) 시 [isLoggedIn]을 강등한다(호출자가
+     * 전체 로그인으로 진행). 통신 불가(IO·5xx)는 **강등 없이 false** — 세션 판정을 보류하되 fast-path를
+     * 태우지 않아, 오프라인 복귀마다 잔액이 0으로 덮이는 회귀를 막는다(crosscheck R2 G3). 이때 전체
+     * 로그인 경로가 실패해도 비파괴 로그인이 세션을 복원하므로 멀쩡한 세션이 파괴되지 않는다.
+     * 비파괴 복원·프로세스 복원으로 살아남은 세션이 죽은 채 CloudDone으로 고착되는 것 방지(crosscheck R1 F7).
+     */
+    suspend fun revalidate(): Boolean = withContext(Dispatchers.IO) {
+        if (!isLoggedIn) return@withContext false
+        val valid = try {
+            verifyLogin()
+        } catch (e: CancellationException) {
+            throw e   // 취소를 세션 판정으로 오독 금지(crosscheck R2 G2)
+        } catch (e: Exception) {
+            return@withContext false   // 통신 불가 — 강등 없이 전체 로그인 경로로
+        }
+        if (!valid) isLoggedIn = false
+        valid
+    }
+
+    /** mypage 200 여부로 검증. 리다이렉트 추적 안 함(302 ≠ 성공). IO 예외·5xx는 전파(일시 장애). */
+    private fun verifyLogin(): Boolean =
         session.get(
             session.base(ApiConstants.BALANCE),
             mapOf("X-Requested-With" to "XMLHttpRequest"),
             follow = false,
-        ).use { it.code == 200 }
-    } catch (e: Exception) {
-        false
-    }
+        ).use { resp ->
+            // 5xx = 서버 장애(추첨 직후 피크 등) — 자격증명 거절로 오판하면 재시도가 봉쇄된다.
+            if (resp.code >= 500) throw java.io.IOException("verify_http_${resp.code}")
+            resp.code == 200
+        }
 
     /** 예치금 잔액. 로그인 상태에서만. 만료(HTML)/실패 시 0. (Dart처럼 리다이렉트 추적 안 함) */
     suspend fun getBalance(): Int = withContext(Dispatchers.IO) {

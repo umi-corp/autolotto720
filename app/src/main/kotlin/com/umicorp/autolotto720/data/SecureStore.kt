@@ -67,21 +67,32 @@ class SecureStore(context: Context) {
 
     private val appContext = context.applicationContext
 
+    private val prefs: SharedPreferences = retryOnce { createPrefs(PREFS_FILE) }
+
+    /**
+     * Keystore 일시 오류 방어 — 1회 재시도(100ms) 후 재실패는 그대로 던진다(조용한 기본값 위장 금지).
+     * 근거: 645 제보 증상이 다음 실행에서 자가복구됨 = transient. 영속 keyset 손상 복구(파일 리셋 =
+     * 자격증명 파괴)는 범위 밖. 읽기·생성은 멱등이라 광범위 재시도가 무해하다.
+     */
+    private fun <T> retryOnce(block: () -> T): T = try {
+        block()
+    } catch (e: Exception) {
+        Thread.sleep(100)
+        block()
+    }
+
+    // MasterKey 생성도 Keystore 접근이라 재시도 경계 안에 둔다.
     @Suppress("DEPRECATION") // security-crypto는 deprecated지만 표준·동작 (DESIGN §6). 제거 시 Tink/Keystore.
-    private val masterKey = MasterKey.Builder(appContext)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val prefs: SharedPreferences = createPrefs(PREFS_FILE)
-
-    @Suppress("DEPRECATION")
     private fun createPrefs(fileName: String): SharedPreferences = EncryptedSharedPreferences.create(
         appContext,
         fileName,
-        masterKey,
+        MasterKey.Builder(appContext).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
+
+    /** 모든 getter의 단일 읽기 경로 — 복호화 일시 실패 1회 재시도, throw 계약 유지. */
+    private fun read(key: String): String? = retryOnce { prefs.getString(key, null) }
 
     // === 계정 ===
 
@@ -94,8 +105,8 @@ class SecureStore(context: Context) {
     }
 
     fun getCredentials(): Credentials = Credentials(
-        userId = prefs.getString(SecureKeys.USER_ID, null),
-        password = prefs.getString(SecureKeys.PASSWORD, null),
+        userId = read(SecureKeys.USER_ID),
+        password = read(SecureKeys.PASSWORD),
     )
 
     fun hasCredentials(): Boolean {
@@ -114,12 +125,12 @@ class SecureStore(context: Context) {
 
     fun setAutoEnabled(enabled: Boolean) = putString(SecureKeys.AUTO_ENABLED, enabled.toString())
 
-    fun getAutoEnabled(): Boolean = prefs.getString(SecureKeys.AUTO_ENABLED, null) == "true"
+    fun getAutoEnabled(): Boolean = read(SecureKeys.AUTO_ENABLED) == "true"
 
     fun setAutoGames(games: Int) = putString(SecureKeys.AUTO_GAMES, games.toString())
 
     /** int.tryParse(val ?? '') ?? 0 와 동일. */
-    fun getAutoGames(): Int = prefs.getString(SecureKeys.AUTO_GAMES, null)?.toIntOrNull() ?: 0
+    fun getAutoGames(): Int = read(SecureKeys.AUTO_GAMES)?.toIntOrNull() ?: 0
 
     // === "번호" 탭 설정 (NumberConfig720 JSON) ===
 
@@ -128,53 +139,53 @@ class SecureStore(context: Context) {
     fun setNumberConfig(json: String): Boolean = prefs.edit().putString(SecureKeys.NUMBER_CONFIG, json).commit()
 
     /** 저장된 JSON(없으면 null → 마이그레이션/기본값 폴백). 파싱·sanitize는 [NumberConfig720.fromJson]. */
-    fun getNumberConfig(): String? = prefs.getString(SecureKeys.NUMBER_CONFIG, null)
+    fun getNumberConfig(): String? = read(SecureKeys.NUMBER_CONFIG)
 
     // === 구매 시간 설정 ===
 
     /** 구매 요일 (1=월 ~ 7=일). */
     fun setAutoPurchaseDay(day: Int) = putString(SecureKeys.AUTO_PURCHASE_DAY, day.toString())
 
-    fun getAutoPurchaseDay(): Int = prefs.getString(SecureKeys.AUTO_PURCHASE_DAY, null)?.toIntOrNull() ?: 5
+    fun getAutoPurchaseDay(): Int = read(SecureKeys.AUTO_PURCHASE_DAY)?.toIntOrNull() ?: 5
 
     fun setAutoPurchaseHour(hour: Int) = putString(SecureKeys.AUTO_PURCHASE_HOUR, hour.toString())
 
-    fun getAutoPurchaseHour(): Int = prefs.getString(SecureKeys.AUTO_PURCHASE_HOUR, null)?.toIntOrNull() ?: 9
+    fun getAutoPurchaseHour(): Int = read(SecureKeys.AUTO_PURCHASE_HOUR)?.toIntOrNull() ?: 9
 
     fun setAutoPurchaseMinute(minute: Int) = putString(SecureKeys.AUTO_PURCHASE_MINUTE, minute.toString())
 
-    fun getAutoPurchaseMinute(): Int = prefs.getString(SecureKeys.AUTO_PURCHASE_MINUTE, null)?.toIntOrNull() ?: 0
+    fun getAutoPurchaseMinute(): Int = read(SecureKeys.AUTO_PURCHASE_MINUTE)?.toIntOrNull() ?: 0
 
     // === 언어 설정 ===
 
     fun setLanguage(lang: String) = putString(SecureKeys.LANGUAGE, lang)
 
-    fun getLanguage(): String = prefs.getString(SecureKeys.LANGUAGE, null) ?: "system"
+    fun getLanguage(): String = read(SecureKeys.LANGUAGE) ?: "system"
 
     // === 잔액 부족 알림 ===
 
     fun setBalanceAlertEnabled(enabled: Boolean) = putString(SecureKeys.BALANCE_ALERT_ENABLED, enabled.toString())
 
-    fun getBalanceAlertEnabled(): Boolean = prefs.getString(SecureKeys.BALANCE_ALERT_ENABLED, null) == "true"
+    fun getBalanceAlertEnabled(): Boolean = read(SecureKeys.BALANCE_ALERT_ENABLED) == "true"
 
     fun setBalanceAlertThreshold(threshold: Int) = putString(SecureKeys.BALANCE_ALERT_THRESHOLD, threshold.toString())
 
     fun getBalanceAlertThreshold(): Int =
-        prefs.getString(SecureKeys.BALANCE_ALERT_THRESHOLD, null)?.toIntOrNull() ?: 5000
+        read(SecureKeys.BALANCE_ALERT_THRESHOLD)?.toIntOrNull() ?: 5000
 
     fun setBalanceAlertLastDate(date: String) = putString(SecureKeys.BALANCE_ALERT_LAST_DATE, date)
 
-    fun getBalanceAlertLastDate(): String? = prefs.getString(SecureKeys.BALANCE_ALERT_LAST_DATE, null)
+    fun getBalanceAlertLastDate(): String? = read(SecureKeys.BALANCE_ALERT_LAST_DATE)
 
     // === 자동구매 멱등 가드 ===
 
     /** 구매 성공 직후 기록(commit) — Worker 재실행 시 같은 회차 중복 결제 방지. */
     fun setLastPurchasedRound(round: Int) = putString(SecureKeys.LAST_PURCHASED_ROUND, round.toString())
 
-    fun getLastPurchasedRound(): Int = prefs.getString(SecureKeys.LAST_PURCHASED_ROUND, null)?.toIntOrNull() ?: 0
+    fun getLastPurchasedRound(): Int = read(SecureKeys.LAST_PURCHASED_ROUND)?.toIntOrNull() ?: 0
 
     /** [LAST_PURCHASED_ROUND]를 기록한 계정 — 회차 가드를 계정 스코프(AppContainer.accountScopedRound)로 판정. */
-    fun getLastPurchaseOwner(): String? = prefs.getString(SecureKeys.LAST_PURCHASE_OWNER, null)
+    fun getLastPurchaseOwner(): String? = read(SecureKeys.LAST_PURCHASE_OWNER)
 
     /**
      * (회차, 소유 계정)을 **한 Editor·한 commit()으로 원자 저장** — 부분 기록(회차만/소유만) 방지.
@@ -190,15 +201,15 @@ class SecureStore(context: Context) {
 
     /** money-path: commit() 반환으로 영속 성공 확인 — false면 호출부가 StateFlow를 낙관 갱신하지 않는다. */
     fun setDailyBudget(won: Int): Boolean = prefs.edit().putString(SecureKeys.DAILY_BUDGET, won.toString()).commit()
-    fun getDailyBudget(): Int = prefs.getString(SecureKeys.DAILY_BUDGET, null)?.toIntOrNull() ?: 5000
+    fun getDailyBudget(): Int = read(SecureKeys.DAILY_BUDGET)?.toIntOrNull() ?: 5000
 
     /** money-path: commit() 반환으로 영속 성공 확인 — false면 호출부가 StateFlow를 낙관 갱신하지 않는다. */
     fun setWeeklyBudget(won: Int): Boolean = prefs.edit().putString(SecureKeys.WEEKLY_BUDGET, won.toString()).commit()
-    fun getWeeklyBudget(): Int = prefs.getString(SecureKeys.WEEKLY_BUDGET, null)?.toIntOrNull() ?: 5000
+    fun getWeeklyBudget(): Int = read(SecureKeys.WEEKLY_BUDGET)?.toIntOrNull() ?: 5000
 
     // === 지출 원장 / PENDING ===
 
-    fun getSpendLedger(): String? = prefs.getString(SecureKeys.SPEND_LEDGER, null)
+    fun getSpendLedger(): String? = read(SecureKeys.SPEND_LEDGER)
     fun setSpendLedger(json: String): Boolean = prefs.edit().putString(SecureKeys.SPEND_LEDGER, json).commit()
 
     /** 지출을 원장에 더하고 7일 초과 정리 후 저장. commit 성공 여부 반환(성공·부분·결과불명 공통). */
@@ -207,7 +218,7 @@ class SecureStore(context: Context) {
         return setSpendLedger(BudgetGuard.toJson(next))
     }
 
-    fun getPendingPurchase(): String? = prefs.getString(SecureKeys.PENDING_PURCHASE, null)
+    fun getPendingPurchase(): String? = read(SecureKeys.PENDING_PURCHASE)
     /** money-path: commit() 반환으로 영속 성공 확인 — false면 호출부가 결제에 진입하지 않는다. */
     fun setPendingPurchase(json: String): Boolean = prefs.edit().putString(SecureKeys.PENDING_PURCHASE, json).commit()
     fun clearPendingPurchase() { prefs.edit().remove(SecureKeys.PENDING_PURCHASE).commit() }

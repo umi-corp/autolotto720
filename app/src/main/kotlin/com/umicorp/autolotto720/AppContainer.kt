@@ -30,6 +30,7 @@ import com.umicorp.autolotto720.ui.vm.HistoryViewModel
 import com.umicorp.autolotto720.ui.vm.HomeViewModel
 import com.umicorp.autolotto720.ui.vm.PurchaseSetupViewModel
 import com.umicorp.autolotto720.ui.vm.SettingsViewModel
+import com.umicorp.autolotto720.util.OnceGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -129,31 +130,73 @@ class AppContainer(context: Context) {
     private val _updateProgress = MutableStateFlow<Float?>(null)  // null=대기, 0..1=다운로드 중
     val updateProgress: StateFlow<Float?> = _updateProgress.asStateFlow()
 
-    // === 스플래시 하이드레이션 (원본 splash_screen `_initialize` 1:1) ===
+    // === 프로세스 스코프 하이드레이션 (645 crosscheck 포트: rememberSaveable 복원으로 스플래시가
+    //     스킵돼도 AppRoot가 재호출 — 성공 1회, 실패는 재시도 가능해야 한다) ===
 
-    /** SecureStore → 플로우. 네트워크 없음. */
-    suspend fun loadSettings() = withContext(Dispatchers.IO) {
-        _autoEnabled.value = store.getAutoEnabled()
-        _autoGames.value = store.getAutoGames()
-        _numberConfig.value = loadNumberConfig()
-        _autoPurchaseDay.value = store.getAutoPurchaseDay()
-        _autoPurchaseHour.value = store.getAutoPurchaseHour()
-        _autoPurchaseMinute.value = store.getAutoPurchaseMinute()
-        _balanceAlertEnabled.value = store.getBalanceAlertEnabled()
-        _balanceAlertThreshold.value = store.getBalanceAlertThreshold()
-        _dailyBudget.value = store.getDailyBudget()
-        _weeklyBudget.value = store.getWeeklyBudget()
-        _language.value = store.getLanguage()
-        val currentUser = store.getCredentials().userId
-        _loggedInUserId.value = currentUser
-        // G1 마이그레이션: 소유 계정 키 신설 이전 기록은 owner=null → 현재 계정으로 1회 스탬프(레거시=기기스코프 복원, 중복결제 방지).
-        val recordedRound = store.getLastPurchasedRound()
-        if (shouldBackfillOwner(recordedRound, store.getLastPurchaseOwner(), currentUser)) {
-            store.setLastPurchase(recordedRound, currentUser!!)
+    private val hydrationGate = OnceGate()
+
+    /** 하이드레이션 성공 여부 — 구매설정 저장 게이트용(실데이터 로드 전 빈 슬롯 덮어쓰기 방지). */
+    private val _hydrated = MutableStateFlow(false)
+    val hydrated: StateFlow<Boolean> = _hydrated.asStateFlow()
+
+    private val _hydrationFailed = MutableStateFlow(false)
+    val hydrationFailed: StateFlow<Boolean> = _hydrationFailed.asStateFlow()
+
+    /** 설정 하이드레이션 1회 보장. 실패는 [hydrationFailed]로 노출(다음 호출이 재시도). 던지지 않는다. */
+    suspend fun ensureHydrated() {
+        try {
+            hydrationGate.run { loadSettings() }
+            _hydrated.value = true
+            _hydrationFailed.value = false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _hydrationFailed.value = true
         }
-        _lastPurchasedRound.value = accountScopedRound(recordedRound, store.getLastPurchaseOwner(), currentUser)
+    }
+
+    /** SecureStore → 플로우. 네트워크 없음. 전 키를 먼저 읽고 일괄 반영(부분 하이드레이션 방지). */
+    private suspend fun loadSettings() = withContext(Dispatchers.IO) {
+        val autoEnabled = store.getAutoEnabled()
+        val autoGames = store.getAutoGames()
+        val numberConfig = loadNumberConfig()
+        val day = store.getAutoPurchaseDay()
+        val hour = store.getAutoPurchaseHour()
+        val minute = store.getAutoPurchaseMinute()
+        val alertEnabled = store.getBalanceAlertEnabled()
+        val alertThreshold = store.getBalanceAlertThreshold()
+        val daily = store.getDailyBudget()
+        val weekly = store.getWeeklyBudget()
+        val language = store.getLanguage()
+        val currentUser = store.getCredentials().userId
+        val recordedRound = store.getLastPurchasedRound()
+        val recordedOwner = store.getLastPurchaseOwner()
+
+        // G1 마이그레이션: 소유 계정 키 신설 이전 기록은 owner=null → 현재 계정으로 1회 스탬프
+        // (레거시=기기스코프 복원, 중복결제 방지). 읽기 완료 후·플로우 발행 전 — 예외는 발행 없이
+        // 전파되고, commit=false면 backfilled=false로 남아 발행이 디스크 사실(owner=null)을 따른다
+        // (메모리-디스크 발산 방지, crosscheck R2).
+        val backfilled = shouldBackfillOwner(recordedRound, recordedOwner, currentUser) &&
+            store.setLastPurchase(recordedRound, currentUser!!)
+
+        _autoEnabled.value = autoEnabled
+        _autoGames.value = autoGames
+        _numberConfig.value = numberConfig
+        _autoPurchaseDay.value = day
+        _autoPurchaseHour.value = hour
+        _autoPurchaseMinute.value = minute
+        _balanceAlertEnabled.value = alertEnabled
+        _balanceAlertThreshold.value = alertThreshold
+        _dailyBudget.value = daily
+        _weeklyBudget.value = weekly
+        _language.value = language
+        _loggedInUserId.value = currentUser
+        _lastPurchasedRound.value =
+            accountScopedRound(recordedRound, if (backfilled) currentUser else recordedOwner, currentUser)
         // 앱 실행마다 알람 재무장(자동구매 활성 시). 업데이트·강제종료·OEM 정리로 소실된 알람 복구 — 멱등.
-        scheduler.rescheduleAll()
+        // 별도 runCatching: 알람 재무장 실패가 설정 하이드레이션 실패로 위장하지 않게(취소는 전파).
+        runCatching { scheduler.rescheduleAll() }
+            .onFailure { if (it is CancellationException) throw it }
     }
 
     /** GitHub 릴리스에서 새 버전 확인 → updateInfo 세팅(없으면 null). AppShell 진입 시 호출. */
@@ -172,21 +215,84 @@ class AppContainer(context: Context) {
         return file
     }
 
-    /** 저장된 자격증명으로 자동 로그인 + 잔액 + 잔액부족 체크. 실패는 조용히 무시(원본). */
-    suspend fun autoLogin() {
-        if (!store.hasCredentials()) return
-        val cred = store.getCredentials()
-        val id = cred.userId ?: return
-        val pw = cred.password ?: return
+    // === 자동 로그인 (645 crosscheck 포트: 공유 세션의 모든 auth.login/logout은 loginMutex로 직렬화.
+    //     락 중첩 방향: **loginMutex ⊃ PurchaseLock 한 방향만** — 645와 반대다(645는 즉시구매가 공유
+    //     세션이라 PurchaseLock ⊃ loginMutex였지만, 720 즉시구매·워커는 전용 세션이라 loginMutex를
+    //     잡지 않는다 — PurchaseLock 보유 중 loginMutex 획득 경로가 없어 이 방향이 데드락 프리).
+    //     645 코드를 추가 포팅할 때 역방향 중첩을 들여오지 말 것) ===
+
+    private val loginMutex = Mutex()
+
+    private val _autoLoginFailed = MutableStateFlow(false)
+    val autoLoginFailed: StateFlow<Boolean> = _autoLoginFailed.asStateFlow()
+
+    /** 자동 재시도 가능 여부 — 자격증명 거절(INVALID_CREDENTIALS)은 재시도해도 소용없다. */
+    @Volatile
+    var autoLoginRetryable = false
+        private set
+
+    /**
+     * 저장된 자격증명으로 자동 로그인 + 잔액 + 잔액부족 체크. single-flight(tryLock) —
+     * 진행 중이면 no-op. 실패는 [autoLoginFailed]로 노출(과거의 조용한 무시 대체). 던지지 않는다.
+     * @return true = 이 호출이 실제 수행됨(락 획득). false = 다른 로그인이 진행 중이라 스킵 —
+     *         호출자가 자기 호출의 실패 여부로 재시도를 판단할 때 선점 상태를 오독하지 않게 한다.
+     */
+    suspend fun autoLogin(): Boolean = withContext(Dispatchers.IO) {
+        if (!loginMutex.tryLock()) return@withContext false   // 이미 로그인 진행 중
         try {
-            auth.login(id, pw)
-            _isLoggedIn.value = true
-            _loggedInUserId.value = id
-            val b = auth.getBalance()
-            _balance.value = b
-            BalanceAlert.checkAndNotify(appContext, b, _balanceAlertEnabled.value, _balanceAlertThreshold.value)
-        } catch (_: Exception) {
-            // 원본 debugPrint('자동 로그인 실패') 후 무시.
+            // 잔존 세션 재검증(crosscheck R1 F7): 비파괴 복원·프로세스 복원으로 살아남은 세션이
+            // 서버측에선 만료됐을 수 있다 — 검증 없이 단락하면 CloudDone+죽은 세션이 고착된다.
+            // 만료 확인 시 isLoggedIn이 강등돼 아래 전체 로그인 경로로 자연 진행한다.
+            if (auth.isLoggedIn && auth.revalidate()) {
+                // 로그인은 성공했는데 publish 코루틴이 취소된 분기(회전 등) — UI 상태만 동기화.
+                if (!_isLoggedIn.value) {
+                    _isLoggedIn.value = true
+                    runCatching { _loggedInUserId.value = store.getCredentials().userId }
+                        .onFailure { if (it is CancellationException) throw it }
+                }
+                _autoLoginFailed.value = false
+                runCatching { refreshBalance() }   // 회전·복원 경로의 잔액 0 잔존 방지(F7). 취소는 전파(G2).
+                    .onFailure { if (it is CancellationException) throw it }
+                return@withContext true
+            }
+            val cred = try {
+                store.getCredentials()
+            } catch (e: CancellationException) {
+                throw e   // 취소를 실패 플래그로 오기록 금지(crosscheck R1)
+            } catch (e: Exception) {
+                _autoLoginFailed.value = true
+                autoLoginRetryable = true
+                return@withContext true
+            }
+            val id = cred.userId
+            val pw = cred.password
+            if (id == null || pw == null) {
+                // 자격증명 없음 = 정상 비로그인 — 직전 일시 실패의 amber가 남지 않게 정리(crosscheck R1 F5).
+                _autoLoginFailed.value = false
+                autoLoginRetryable = false
+                return@withContext true
+            }
+            try {
+                auth.login(id, pw)
+                _isLoggedIn.value = true
+                _loggedInUserId.value = id
+                _autoLoginFailed.value = false
+                val b = auth.getBalance()
+                _balance.value = b
+                BalanceAlert.checkAndNotify(appContext, b, _balanceAlertEnabled.value, _balanceAlertThreshold.value)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _autoLoginFailed.value = true
+                autoLoginRetryable = (e as? DhlotteryException)?.message != "INVALID_CREDENTIALS"
+                // 플로우를 세션 사실과 동기화(crosscheck R3 H1): revalidate 강등 후 재로그인 실패면
+                // false → amber 노출·재시도 경로 활성. 오프라인 복원(비파괴, prevLoggedIn=true)이면
+                // true 유지 — 멀쩡한 세션 표시가 강등되지 않는다.
+                _isLoggedIn.value = auth.isLoggedIn
+            }
+            true
+        } finally {
+            loginMutex.unlock()
         }
     }
 
@@ -194,26 +300,48 @@ class AppContainer(context: Context) {
 
     /** 수동 로그인(설정 화면). 실패 시 throw(INVALID_CREDENTIALS 등) — 호출자가 매핑. 잔액알림은 안 함(원본과 동일). */
     suspend fun login(id: String, pw: String) {
-        auth.login(id, pw)
-        // 자격증명 커밋은 구매 임계구역과 직렬화(PurchaseLock) — 워커/즉시구매의 자격증명 읽기와 경합 방지.
-        PurchaseLock.mutex.withLock { store.saveCredentials(id, pw) }
-        _isLoggedIn.value = true
-        _loggedInUserId.value = id
-        // 회차 가드는 계정 스코프 — 기록은 건드리지 않고 판정 시점에 소유 계정으로 대조한다([accountScopedRound]).
-        // 다른 계정 로그인 시 이 계정 기준 0(=미구매), 같은 계정 재로그인 시 기록 보존.
-        _lastPurchasedRound.value = accountScopedRound(store.getLastPurchasedRound(), store.getLastPurchaseOwner(), id)
-        _balance.value = auth.getBalance()
+        // 세션 변경·자격증명 커밋·상태 발행을 한 전이로 직렬화(crosscheck R1 F2) — 락 밖 커밋 창에
+        // logout/autoLogin이 끼어들어 "세션과 UI·디스크가 어긋난 상태"가 남는 것을 막는다.
+        loginMutex.withLock {
+            auth.login(id, pw)
+            try {
+                // 자격증명 커밋은 구매 임계구역과도 직렬화(PurchaseLock) — 워커/즉시구매의 자격증명 읽기와 경합 방지.
+                PurchaseLock.mutex.withLock { store.saveCredentials(id, pw) }
+            } catch (e: Exception) {
+                // 커밋 실패가 "UI는 실패 표시·세션만 새 계정" 부분 커밋으로 남지 않게 세션 롤백(전이 원자성).
+                // auth.logout()은 로컬 정리(쿠키 clear+플래그)라 네트워크·취소와 무관하게 완료된다.
+                runCatching { auth.logout() }
+                _isLoggedIn.value = false
+                _loggedInUserId.value = null   // 로그아웃 상태와 쌍 정합(crosscheck R2)
+                throw e
+            }
+            _isLoggedIn.value = true
+            _loggedInUserId.value = id
+            _autoLoginFailed.value = false
+            // 회차 가드는 계정 스코프 — 기록은 건드리지 않고 판정 시점에 소유 계정으로 대조한다([accountScopedRound]).
+            // 다른 계정 로그인 시 이 계정 기준 0(=미구매), 같은 계정 재로그인 시 기록 보존.
+            _lastPurchasedRound.value = accountScopedRound(store.getLastPurchasedRound(), store.getLastPurchaseOwner(), id)
+            // 잔액도 전이 안에서 — 락 밖이면 로그아웃 경합 시 0으로 초기화된 잔액을 늦게 덮어쓸 수
+            // 있다(crosscheck R3 H2). auth.login(6왕복)이 이미 락 안이라 추가 지연은 1왕복뿐.
+            _balance.value = auth.getBalance()
+        }
     }
 
     suspend fun logout() = withContext(Dispatchers.IO) {
-        auth.logout()
-        store.deleteCredentials()
-        // 자격증명 없는 자동구매는 매주 조용히 무동작(+다른 계정 재로그인 시 이전 설정으로 재개 위험)
-        // → 로그아웃과 함께 해제·알람 취소. 비로그인 상태에선 스위치가 잠겨 사용자가 끌 수도 없다.
-        if (_autoEnabled.value) setAutoEnabled(false)
-        _isLoggedIn.value = false
-        _balance.value = 0
-        _loggedInUserId.value = null
+        // 전이 전체를 직렬화(crosscheck R1 F2) — 진행 중 login/autoLogin의 늦은 커밋이 로그아웃을
+        // 무효화(자격증명 재저장·상태 되살림)하지 못하게 한다. 자격증명 삭제는 login의 저장과
+        // 대칭으로 PurchaseLock과도 직렬화(워커의 자격증명 읽기 경합 방지).
+        loginMutex.withLock {
+            auth.logout()
+            PurchaseLock.mutex.withLock { store.deleteCredentials() }
+            // 자격증명 없는 자동구매는 매주 조용히 무동작(+다른 계정 재로그인 시 이전 설정으로 재개 위험)
+            // → 로그아웃과 함께 해제·알람 취소. 비로그인 상태에선 스위치가 잠겨 사용자가 끌 수도 없다.
+            if (_autoEnabled.value) setAutoEnabled(false)
+            _isLoggedIn.value = false
+            _balance.value = 0
+            _loggedInUserId.value = null
+            _autoLoginFailed.value = false  // 자격증명 없음 = 실패 상태 아님(amber 해제)
+        }
     }
 
     /**
@@ -517,23 +645,32 @@ class AppContainer(context: Context) {
 
     // === 데이터 초기화 (원본 설정 화면 `_showResetDialog`) ===
     suspend fun resetAll() = withContext(Dispatchers.IO) {
-        store.clearAll()
-        auth.logout()
-        scheduler.cancelAll()  // 삭제된 설정을 참조하는 알람 제거 (원본 대비 의도된 보강)
-        _isLoggedIn.value = false
-        _balance.value = 0
-        _autoEnabled.value = false
-        _autoGames.value = 0
-        _numberConfig.value = NumberConfig720.empty()
-        _autoPurchaseDay.value = 5
-        _autoPurchaseHour.value = 9
-        _autoPurchaseMinute.value = 0
-        _balanceAlertEnabled.value = false
-        _balanceAlertThreshold.value = 5000
-        _dailyBudget.value = 5000
-        _weeklyBudget.value = 5000
-        _loggedInUserId.value = null
-        _lastPurchasedRound.value = 0   // clearAll이 회차·소유 계정 기록도 지운다 — 플로우를 stale로 두지 않는다.
+        // 전이 전체를 직렬화(crosscheck R2 G1) — login/logout과 동일 원칙. 락 밖이면 진행 중 로그인의
+        // 늦은 커밋이 "전체 초기화 후 자격증명 잔존"을 만든다. 디스크 초기화는 워커의 자격증명·원장
+        // 접근과도 직렬화(PurchaseLock 대칭, 허용 중첩 방향 loginMutex ⊃ PurchaseLock 준수).
+        loginMutex.withLock {
+            PurchaseLock.mutex.withLock { store.clearAll() }
+            auth.logout()
+            scheduler.cancelAll()  // 삭제된 설정을 참조하는 알람 제거 (원본 대비 의도된 보강)
+            _isLoggedIn.value = false
+            _balance.value = 0
+            _autoEnabled.value = false
+            _autoGames.value = 0
+            _numberConfig.value = NumberConfig720.empty()
+            _autoPurchaseDay.value = 5
+            _autoPurchaseHour.value = 9
+            _autoPurchaseMinute.value = 0
+            _balanceAlertEnabled.value = false
+            _balanceAlertThreshold.value = 5000
+            _dailyBudget.value = 5000
+            _weeklyBudget.value = 5000
+            _loggedInUserId.value = null
+            _lastPurchasedRound.value = 0   // clearAll이 회차·소유 계정 기록도 지운다 — 플로우를 stale로 두지 않는다.
+            _autoLoginFailed.value = false
+            // 초기화 = 메모리·디스크 모두 기본값으로 확정 — 하이드레이션 상태도 일관되게(저장 게이트·amber 해제).
+            _hydrated.value = true
+            _hydrationFailed.value = false
+        }
     }
 
     /** 화면별 ViewModel 팩토리(컴포지션 루트가 컨테이너 주입). */
