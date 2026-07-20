@@ -21,8 +21,8 @@ android {
         applicationId = "com.umicorp.autolotto720"
         minSdk = 31          // Android 12 — dynamic color / M3 Expressive 풀 적용, 폴백 불필요
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.1.1"
+        versionCode = 13
+        versionName = "1.2.0"
     }
 
     if (keystorePropertiesFile.exists()) {
