@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZonedDateTime
@@ -264,6 +265,10 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    /** 회차 → 당첨번호(헤더 미니볼용). 추첨완료 회차만 채워진다 — 없으면 헤더 볼 생략. */
+    private val _winningNumbers = MutableStateFlow<Map<Int, WinningNumbers720>>(emptyMap())
+    val winningNumbers: StateFlow<Map<Int, WinningNumbers720>> = _winningNumbers.asStateFlow()
+
     /** 다음 "더 보기" 창의 끝 날짜 다음 날(= 마지막으로 로드한 창의 시작일). */
     private var oldestStart: LocalDate = LocalDate.now()
     private var windowsLoaded = 0
@@ -284,6 +289,7 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
                 oldestStart = start
                 windowsLoaded = 1
                 _canLoadMore.value = true
+                fetchWinningNumbers()
             } catch (e: Exception) {
                 _error.value = e.message  // 5b가 historyLoadError 템플릿으로 로컬라이즈
                 _canLoadMore.value = false
@@ -306,10 +312,27 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
                 oldestStart = start
                 windowsLoaded++
                 if (windowsLoaded >= MAX_WINDOWS) _canLoadMore.value = false
+                fetchWinningNumbers()
             } catch (_: Exception) {
             } finally {
                 _loadingMore.value = false
             }
+        }
+    }
+
+    /**
+     * 추첨완료 회차의 당첨번호를 보충(회차 수와 무관하게 HTTP 1회) — 헤더 미니볼용.
+     * 부가 UI라 별도 코루틴으로 분리 — 이 조회가 느려도 loading/loadingMore 해제를 붙잡지 않는다
+     * (crosscheck R1 F1). [ResultService720.getWinningNumbersMap]은 던지지 않으므로 실패는
+     * 조용히 헤더 볼만 생략되고, 빠진 회차는 다음 호출의 need에 남아 자기치유된다.
+     */
+    private fun fetchWinningNumbers() {
+        viewModelScope.launch {
+            val need = _tickets.value.filter { it.checked }.mapTo(mutableSetOf()) { it.round } - _winningNumbers.value.keys
+            if (need.isEmpty()) return@launch
+            val fetched = container.resultService720.getWinningNumbersMap(need)
+            // update: 동시 fetch(로드 직후 더 보기 등)의 read-modify-write 유실 방지(crosscheck R1 F2).
+            if (fetched.isNotEmpty()) _winningNumbers.update { it + fetched }
         }
     }
 

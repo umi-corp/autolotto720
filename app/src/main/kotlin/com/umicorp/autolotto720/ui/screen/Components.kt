@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -69,6 +71,7 @@ fun JoNumberDisplay(
     accent: Color = MaterialTheme.colorScheme.primary,
     matchedSuffix: Int = -1,   // -1=추첨 전(균일 렌더). 0..6=추첨완료 시 맞은 "뒤 k자리"(Rank720.matchedDigits).
     ballPopKey: Any? = null,   // null=정적(내역). 비null(예: 회차)=홈 등장 시 볼별 스태거 팝인(645 동일).
+    ballSize: Dp = 30.dp,      // 22.dp=내역 헤더 미니볼(645 미니볼 포트) — 본문 티켓 행(30)과 위계 분리.
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
@@ -91,6 +94,7 @@ fun JoNumberDisplay(
                         ring = PensionDigitRings.getOrElse(i) { PensionDigitRings.last() },
                         dimmed = matchedSuffix >= 0 && !matched,
                         matched = matched,
+                        size = ballSize,
                     )
                 }
             }
@@ -118,20 +122,27 @@ private fun BallPop(index: Int, key: Any?, content: @Composable () -> Unit) {
  * [matched]=추첨에서 맞은 자리 → 링 색으로 채워 강조(흰 숫자). [dimmed]=안 맞은 자리 → alpha로 흐림.
  */
 @Composable
-private fun PensionBall(digit: Char, ring: Color, dimmed: Boolean = false, matched: Boolean = false) {
+private fun PensionBall(digit: Char, ring: Color, dimmed: Boolean = false, matched: Boolean = false, size: Dp = 30.dp) {
     Box(
         modifier = Modifier
-            .size(30.dp)
+            .size(size)
             .clip(CircleShape)
             .background(if (matched) ring else Color.White)
-            .border(2.5.dp, ring, CircleShape)
+            .border(if (size < 26.dp) 2.dp else 2.5.dp, ring, CircleShape)
             .alpha(if (dimmed) 0.32f else 1f),
         contentAlignment = Alignment.Center,
     ) {
+        // 볼 비례 + 소형 볼 하한 11sp. lineHeight를 fontSize에 맞추고 폰트 패딩을 없애야
+        // 상속 lineHeight 탓에 글리프가 우하단으로 밀리는 치우침이 사라진다(645 미니볼 피드백).
+        // 이 센터링 수정은 기본 30dp 경로에도 적용되는 의도된 공유 개선 — 사이즈·보더·폰트 수치는
+        // 30dp에서 기존과 동일(15sp/2.5dp)하고, 홈·티켓 행 렌더는 E2E 스크린샷으로 확인한다.
+        val fs = (size.value * 0.5f).coerceAtLeast(11f).sp
         Text(
             digit.toString(),
             fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
+            fontSize = fs,
+            lineHeight = fs,
+            style = LocalTextStyle.current.copy(platformStyle = PlatformTextStyle(includeFontPadding = false)),
             // 맞은(채워진) 볼은 흰 숫자로 대비, 그 외 테마 무관 고정 네이비(공식 사이트 검정 숫자 톤).
             color = if (matched) Color.White else Color(0xFF1E2D50),
         )
