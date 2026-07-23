@@ -22,6 +22,20 @@ val Rank720.matchedDigits: Int
     }
 
 /**
+ * 3~7등 고정 일시금(원) — 공식 지급표(1백만/1십만/5만/5천/1천). 연금식(1·2등·보너스)·미당첨·추첨전은 0.
+ * 내역 파싱([com.umicorp.autolotto720.dhlottery.HistoryService720])과 알림 총액이 같은 표를 읽는 단일 출처.
+ */
+val Rank720.lumpPrize: Long
+    get() = when (this) {
+        Rank720.THIRD -> 1_000_000
+        Rank720.FOURTH -> 100_000
+        Rank720.FIFTH -> 50_000
+        Rank720.SIXTH -> 5_000
+        Rank720.SEVENTH -> 1_000
+        else -> 0
+    }
+
+/**
  * 구매한 연금복권720+ 티켓 1장.
  * number/bonus는 6자리 0패딩 문자열 — leading zero 보존을 위해 Int가 아니라 String.
  */

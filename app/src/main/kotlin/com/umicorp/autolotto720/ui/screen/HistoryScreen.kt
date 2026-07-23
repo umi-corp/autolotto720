@@ -213,7 +213,7 @@ private fun LoadMoreButton(loading: Boolean, onClick: () -> Unit) {
 
 /**
  * 회차 1건 카드(autolotto 645 HistoryCard 대응): 헤더(회차+날짜+집계 상태) · 티켓별 조+번호 행
- * (추첨완료 시 행별 등수 필) · (당첨 시) 최고 등수 당첨금/연금 푸터.
+ * (추첨완료 시 행별 등수 필) · (당첨 시) 일시금 합산/연금 푸터.
  *
  * 720은 한 회차 티켓들이 동시 추첨되므로 미추첨/추첨완료가 균일 — 집계 상태를 헤더에 표시하고,
  * 조별 등수는 645의 게임 A~E 필처럼 행 우측에 붙인다.
@@ -335,7 +335,7 @@ private fun RoundCard(round: Int, tickets: List<Ticket720>, index: Int, winning:
             }
         }
 
-        // 푸터: 최고 등수 당첨금(3~7등) / 연금 문구(1·2등·보너스) — 골드 밴드
+        // 푸터: 당첨 일시금 합산(3~7등, 예: 7등×6=₩6,000) / 연금 문구(1·2등·보너스는 prize=0이라 합산 무영향) — 골드 밴드
         if (winner) {
             Box(
                 modifier = Modifier
@@ -345,7 +345,7 @@ private fun RoundCard(round: Int, tickets: List<Ticket720>, index: Int, winning:
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    localizedPrize(bestWinner!!.rank!!, bestWinner.prize),
+                    localizedPrize(bestWinner!!.rank!!, winners.sumOf { it.prize }),
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.ExtraBold,
                     style = MaterialTheme.typography.titleMedium,
