@@ -221,7 +221,8 @@ class SecureStore(context: Context) {
     fun getPendingPurchase(): String? = read(SecureKeys.PENDING_PURCHASE)
     /** money-path: commit() 반환으로 영속 성공 확인 — false면 호출부가 결제에 진입하지 않는다. */
     fun setPendingPurchase(json: String): Boolean = prefs.edit().putString(SecureKeys.PENDING_PURCHASE, json).commit()
-    fun clearPendingPurchase() { prefs.edit().remove(SecureKeys.PENDING_PURCHASE).commit() }
+    /** money-path: commit() 반환으로 해제 성공을 확인 — false면 PENDING이 디스크에 남아 호출부가 "해소됨"으로 보고하면 안 된다. */
+    fun clearPendingPurchase(): Boolean = prefs.edit().remove(SecureKeys.PENDING_PURCHASE).commit()
 
     // === 전체 초기화 ===
 

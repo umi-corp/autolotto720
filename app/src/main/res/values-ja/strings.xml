@@ -235,6 +235,9 @@
     <string name="instantInProgress">購入中…</string>
     <string name="instantSuccessTitle">⚡ 購入完了!</string>
     <string name="instantSuccessBody">第%1$d回 · %2$dゲーム</string>
+    <string name="instantSuccessTitleFromHistory">⚡ 購入を確認しました</string>
+    <string name="instantSuccessBodyFromHistory">第%1$d回 · 履歴上%2$dゲーム</string>
+    <string name="instantSuccessFromHistoryNote">サーバーから応答がなかったため、購入履歴で確認しました。同じ回に複数回購入している場合は、以前の購入も一緒に表示されます。</string>
     <string name="instantNoTickets">指定した番号がすでに販売済みのため、\'購入見送り\'ポリシーにより購入しませんでした。</string>
     <string name="instantErrorTitle">購入失敗</string>
     <string name="instantUnknownTitle">購入結果の確認が必要</string>

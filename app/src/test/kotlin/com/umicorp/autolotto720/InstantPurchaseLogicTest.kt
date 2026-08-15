@@ -3,13 +3,17 @@ package com.umicorp.autolotto720
 import com.umicorp.autolotto720.data.FallbackPolicy
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.Slot720
+import com.umicorp.autolotto720.data.SpendEntry
+import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.dhlottery.DhlotteryException
 import com.umicorp.autolotto720.ui.vm.SettingsViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import java.time.LocalDateTime
 
 /**
  * 즉시 구매 순수 로직: 720 판매시간 게이트 경계 + 구매 게이트(purchaseGate).
@@ -175,6 +179,136 @@ class InstantPurchaseLogicTest {
     @Test
     fun `accountScopedRound - 미로그인(현재계정 null)이면 0`() {
         assertEquals(0, accountScopedRound(325, recordedOwner = "userA", currentUserId = null))
+    }
+
+    // === isRoundCoveredByHistory: 결과 불명을 서버 내역으로 확증(순수) ===
+    //
+    // 버그 리포트("구매 결과 확인 필요")의 근본 원인 지점. 앱이 결제 성립을 스스로 판정하지 못하면
+    // 사용자에게 확인을 떠넘기고 그 회차 재구매를 봉쇄하는 것 말고 할 수 있는 게 없다. 서버 내역 대조가
+    // 유일한 확증 수단이고, 그 판정 계약을 여기서 못 박는다(오판 = 이중결제).
+    //
+    // expectedAmount = "이 회차에 청구된 것으로 우리가 계산한 총액" — 호출부가 원장 기록분 + 아직
+    // 기록 전인 시도분을 더해 넘긴다(AppContainer.instantPurchase / settlePending).
+
+    private fun ticket(round: Int, jo: Int = 1, number: String = "000727") =
+        Ticket720(round = round, jo = jo, number = number, purchaseDate = LocalDateTime.of(2026, 7, 16, 10, 0))
+
+    @Test
+    fun `내역 확증 - 서버 내역이 기대 금액 전액을 설명하면 확증`() {
+        val tickets = List(5) { ticket(325, jo = it + 1) }   // 5게임 = 5,000원
+        assertTrue(isRoundCoveredByHistory(round = 325, expectedAmount = 5000, tickets = tickets))
+    }
+
+    @Test
+    fun `내역 확증 - 조회 실패·세션 만료(빈 목록)는 확증 금지(fail-closed)`() {
+        // HistoryService720은 세션 만료(HTML 응답) 시 빈 목록을 준다 — "구매 없음"과 구분 불가.
+        assertFalse(isRoundCoveredByHistory(round = 325, expectedAmount = 5000, tickets = emptyList()))
+    }
+
+    @Test
+    fun `내역 확증 - 다른 회차 티켓은 증거가 아니다`() {
+        assertFalse(isRoundCoveredByHistory(round = 325, expectedAmount = 1000, tickets = listOf(ticket(324))))
+    }
+
+    /** 이중결제 방어의 핵심 케이스 — 티켓 "존재"만 보면 뚫린다. */
+    @Test
+    fun `내역 확증 - 성공한 첫 구매 티켓이 결과 불명 추가 구매를 대신 증명하면 안 된다`() {
+        // 첫 구매 5게임(성공, 원장 5,000) + 추가 1게임 결과 불명 → 기대 6,000.
+        // 서버에는 첫 구매 5장뿐 → 추가 1게임은 미확인. 확증하면 같은 결제를 또 시도할 창이 열린다.
+        val tickets = List(5) { ticket(325, jo = it + 1) }
+        assertFalse(isRoundCoveredByHistory(round = 325, expectedAmount = 6000, tickets = tickets))
+    }
+
+    @Test
+    fun `내역 확증 - 부분 성공으로 티켓이 모자라면 미확증`() {
+        // 5게임 시도(기대 5,000) 중 3게임만 서버에 반영 → 2게임 미확정.
+        val tickets = List(3) { ticket(325, jo = it + 1) }
+        assertFalse(isRoundCoveredByHistory(round = 325, expectedAmount = 5000, tickets = tickets))
+    }
+
+    @Test
+    fun `내역 확증 - 기대 금액이 0 이하면 확증 금지(원장·시도 금액 소실 fail-closed)`() {
+        // 호출부가 기대 금액을 못 구한 상태(원장 유실 등)에서 티켓 존재만으로 통과시키면 안 된다.
+        assertFalse(isRoundCoveredByHistory(round = 325, expectedAmount = 0, tickets = listOf(ticket(325))))
+    }
+
+    // === expectedRoundAmount: 확증에 쓸 기대 금액 계산(순수) ===
+    //
+    // 교차검증에서 드러난 결함 지점. 이전 구현은 max(원장, 시도금액)이라 "첫 구매는 원장에 기록됐고
+    // 이번 시도만 기록 실패"인 혼합 상태에서 시도 금액을 흡수해 버렸다 — 첫 구매 티켓만으로 미확인
+    // 시도가 오확정되어, 판정 함수가 막으려던 이중결제 창이 호출부 계산에서 그대로 열렸다.
+
+    @Test
+    fun `기대 금액 - 시도가 원장에 이미 반영됐으면 원장 값이 곧 총액`() {
+        assertEquals(5000, expectedRoundAmount(roundSpend = 5000, pendingAmount = 1000, pendingInLedger = true))
+    }
+
+    @Test
+    fun `기대 금액 - 시도가 원장에 없으면 더한다(혼합 상태 오확정 차단)`() {
+        // 첫 구매 5,000 성공(원장 기록) + 추가 1,000 결과 불명(원장 기록 실패) → 총액 6,000.
+        // 5,000으로 계산하면 서버의 첫 구매 5장만으로 추가 구매가 오확정된다.
+        assertEquals(6000, expectedRoundAmount(roundSpend = 5000, pendingAmount = 1000, pendingInLedger = false))
+    }
+
+    @Test
+    fun `기대 금액 - 원장이 회차를 통째로 놓쳐도 시도 금액은 살아남는다`() {
+        assertEquals(1000, expectedRoundAmount(roundSpend = 0, pendingAmount = 1000, pendingInLedger = false))
+    }
+
+    /** 마커가 없는 레거시·손상 PENDING은 미반영으로 읽혀 보수적으로(더 큰 기대 금액) 평가돼야 한다. */
+    @Test
+    fun `기대 금액 - 마커 파싱은 없거나 손상이면 미반영(fail-closed)`() {
+        assertFalse(parsePendingLedgerOk(null))
+        assertFalse(parsePendingLedgerOk(""))
+        assertFalse(parsePendingLedgerOk("{}"))
+        assertFalse(parsePendingLedgerOk("""{"round":325,"epochDay":100,"amount":1000}"""))
+        assertTrue(parsePendingLedgerOk(pendingJson(325, 100, 1000, ledgerOk = true)))
+        assertFalse(parsePendingLedgerOk(pendingJson(325, 100, 1000)))
+    }
+
+    /** 마커를 붙여도 기존 PENDING 파싱 계약(round·epochDay·amount)이 깨지면 안 된다. */
+    @Test
+    fun `기대 금액 - 마커가 붙은 PENDING도 기존 필드로 정상 파싱`() {
+        assertEquals(
+            SpendEntry(325, 100, 1000),
+            parsePending(pendingJson(325, 100, 1000, ledgerOk = true, owner = "userA")),
+        )
+    }
+
+    // === canSettlePendingAs: PENDING 소유 계정 대조(순수) ===
+    //
+    // PENDING은 계정 무관 단일 슬롯이라 A의 미결이 남은 채 B로 전환될 수 있다. B의 내역으로 A의 PENDING을
+    // 풀면 회차 가드가 setLastPurchase(round, B)로 스탬프되고, A 복귀 시 accountScopedRound가 소유자
+    // 불일치로 가드를 0으로 봐 A가 같은 회차를 재구매한다 — 이 변경이 막으려던 이중결제가 계정 전환으로 재개된다.
+
+    @Test
+    fun `소유자 대조 - 같은 계정이면 해소 허용`() {
+        assertTrue(canSettlePendingAs(pendingOwner = "userA", currentUserId = "userA"))
+    }
+
+    @Test
+    fun `소유자 대조 - 다른 계정 PENDING은 해소 금지(교차계정 이중결제 차단)`() {
+        assertFalse(canSettlePendingAs(pendingOwner = "userA", currentUserId = "userB"))
+    }
+
+    /**
+     * 레거시(owner 없는) PENDING은 해소하지 않는다 — accountScopedRound의 owner=null 백필과 방향이 반대다.
+     * 그쪽은 "못 막으면 재구매"라 신뢰가 안전 측이고, 여기는 "잘못 풀면 재구매"라 불신이 안전 측이다.
+     */
+    @Test
+    fun `소유자 대조 - 레거시(owner 없음)는 해소 금지(fail-closed)`() {
+        assertFalse(canSettlePendingAs(pendingOwner = null, currentUserId = "userA"))
+        assertFalse(canSettlePendingAs(pendingOwner = "userA", currentUserId = null))
+        assertFalse(canSettlePendingAs(pendingOwner = null, currentUserId = null))
+    }
+
+    @Test
+    fun `소유자 대조 - owner 파싱은 없거나 손상이면 null`() {
+        assertNull(parsePendingOwner(null))
+        assertNull(parsePendingOwner(""))
+        assertNull(parsePendingOwner("{}"))
+        assertNull(parsePendingOwner("""{"round":325,"epochDay":100,"amount":1000}"""))
+        assertEquals("userA", parsePendingOwner(pendingJson(325, 100, 1000, owner = "userA")))
     }
 
     // === shouldBackfillOwner: 레거시 회차 기록에 소유 계정 1회 스탬프(G1) ===

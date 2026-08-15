@@ -11,6 +11,7 @@ import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.SecureStore
 import com.umicorp.autolotto720.data.Slot720
 import com.umicorp.autolotto720.data.SpendEntry
+import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotteryException
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
@@ -449,12 +450,30 @@ class AppContainer(context: Context) {
                 PurchaseGate.PROCEED -> Unit
             }
 
-            // ① 미결 PENDING이 이번 회차에 남아 있으면 직전 결제 결과 불명 — extra 포함 모든 결제 금지(내역 확인 유도, F2).
+            // ① 미결 PENDING이 이번 회차에 남아 있으면 직전 결제 결과 불명 — extra 포함 모든 결제 금지(F2).
             // 순서 고정(PENDING 잔존 → 예산): 예산 예외보다 "결과 불명" 안내를 먼저 표면화해 사용자 안내를 정확히 한다.
-            val pending = parsePending(store.getPendingPurchase())
+            // 차단 전에 서버 내역으로 직전 결과를 확증해본다 — 성립했음이 확인되면 빗장을 스스로 풀어야
+            // 한다. 안 그러면 "내역 탭에서 확인 후 다시 시도해주세요"가 그 회차 안에서는 성립 불가한 안내가 된다.
+            val pendingRaw = store.getPendingPurchase()
+            val pending = parsePending(pendingRaw)
             if (pending?.round == round) {
-                _lastPurchasedRound.value = round
-                throw PurchaseResultUnknownException(DhlotteryException("직전 구매 결과가 확인되지 않았습니다. 내역을 확인해주세요."))
+                // 다른 계정(또는 레거시)의 PENDING은 이 계정 내역으로 풀지 않는다 — 풀면 회차 가드가 이 계정으로
+                // 스탬프되고, 원 계정 복귀 시 accountScopedRound가 가드를 무효로 봐 같은 회차를 재구매한다.
+                val settled = if (canSettlePendingAs(parsePendingOwner(pendingRaw), id)) {
+                    purchaseAuth.login(id, pw)                      // 내역 조회에 로그인 세션 필요
+                    settlePending(pending, parsePendingLedgerOk(pendingRaw), id, recentTickets(purchaseSession))
+                } else {
+                    null
+                }
+                if (settled == null) {
+                    _lastPurchasedRound.value = round
+                    throw PurchaseResultUnknownException(DhlotteryException("직전 구매 결과가 확인되지 않았습니다. 내역을 확인해주세요."))
+                }
+                // 해소됨 = 직전 결제가 실제로 성립했다. 여기서 결제를 이어가면 안 된다 —
+                // 얼럿이 "다시 시도해주세요"라고 안내했으므로 사용자는 직전 시도가 실패한 줄 알고 누른 것이고,
+                // 그대로 진행하면 성립한 결제 위에 한 건을 더 얹는다(extra는 회차 가드를 우회하므로 첫 구매만
+                // 막아서는 못 잡는다). 확증 결과만 돌려주고 멈춘다 — 더 사려면 사용자가 다시 누르면 된다.
+                return@withLock PurchaseResult720(round, settled, pending.amount, confirmedByHistory = true)
             }
 
             // ② 예산 가드 — 결제 진입 전, 미결 PENDING까지 더해 일/회차 한도를 검사(초과 시 미결제·미기록·미커밋).
@@ -465,6 +484,7 @@ class AppContainer(context: Context) {
                 throw BudgetExceededException(store.getDailyBudget(), store.getWeeklyBudget())
             }
 
+            // 위 PENDING 블록은 throw나 return으로만 빠져나가므로 여기 도달했다면 아직 로그인 전이다.
             purchaseAuth.login(id, pw)                              // 세션 만료 대비 매번 재로그인(워커 패턴)
 
             val svc = PurchaseService720(purchaseAuth, purchaseSession)
@@ -472,7 +492,7 @@ class AppContainer(context: Context) {
 
             // connPro 진입 전 선기록(round·epochDay·amount) — 결과 불명·프로세스 사망 시 이 회차 재결제 차단.
             // commit 실패면 결제에 들어가지 않는다(fail-closed). 원장은 확정 후에만 기록되고, 그 전엔 이 PENDING이 예산에 반영된다.
-            if (!store.setPendingPurchase(pendingJson(round, today, attempt))) {
+            if (!store.setPendingPurchase(pendingJson(round, today, attempt, owner = id))) {
                 throw DhlotteryException("결제 준비에 실패했습니다. 다시 시도해주세요.")
             }
 
@@ -494,14 +514,46 @@ class AppContainer(context: Context) {
                         throw f.cause                                  // 서버 확정 거절 — 메시지 그대로(재시도 안전)
                     }
                     is PurchaseFailure.Unknown -> {
-                        // 결과 불명 → 회차 가드 커밋 + 시도 전액 원장 기록만. PENDING은 **항상 유지**(worker Unknown과 대칭).
-                        // extra 구매가 회차 가드를 우회하므로 PENDING을 지우면 결과 불명 회차에 extra로 재진입해 이중결제 가능 —
-                        // "결과 불명 → PENDING 유지" 불변식을 지킨다. 원장 기록은 예외가 오보로 새지 않게 runCatching(money-path 방호).
-                        withContext(NonCancellable) {
-                            runCatching { store.setLastPurchase(round, id) }
-                            runCatching { store.recordSpend(round, today, attempt) }      // 전액
+                        // 결과 불명 → 회차 가드 커밋 + 시도 전액 원장 기록. PENDING은 **확증 못 하면 유지**(worker Unknown과 대칭).
+                        // extra 구매가 회차 가드를 우회하므로 PENDING을 함부로 지우면 결과 불명 회차에 extra로 재진입해 이중결제 가능.
+                        // 대신 사용자에게 "확인 필요"를 떠넘기기 전에 서버 내역으로 실제 접수 여부를 즉시 대조한다 —
+                        // 확증되면 결과 불명이 아니라 성공이므로 정상 성공 결과로 돌려준다. 조회·커밋 전체가 취소 불가(F1·F3).
+                        // 커밋을 먼저 끝낸다 — 조회(네트워크)를 앞에 두면 그 왕복 동안 프로세스가 죽었을 때
+                        // "가드·원장 없이 PENDING만 남은" 상태가 되어 오확정 창이 RTT만큼 넓어진다(확증 판정은
+                        // 조회 이전 원장 스냅샷 `ledger`를 쓰므로 순서를 바꿔도 결과는 같다).
+                        val committed = withContext(NonCancellable) {
+                            val ok = runCatching { store.setLastPurchase(round, id) }.getOrDefault(false)
+                            val ledgerOk = runCatching { store.recordSpend(round, today, attempt) }.getOrDefault(false)   // 전액
+                            // 원장 반영 여부를 PENDING에 남긴다 — 이후 해소 시 기대 금액을 정확히 계산하기 위함
+                            // (마커 쓰기가 실패하면 미기록으로 보수 평가되므로 안전 측으로 닫힌다).
+                            if (ledgerOk) runCatching { store.setPendingPurchase(pendingJson(round, today, attempt, ledgerOk = true, owner = id)) }
+                            ok to ledgerOk
                         }
-                        throw PurchaseResultUnknownException(f.cause)   // 결과 불명 — 재시도 유도 금지
+                        // 조회는 취소 가능 구간 — 락은 잡고 있지만 CE로 끊을 수 있어야 한다(F7: NonCancellable 안에
+                        // 네트워크를 넣으면 응답 지연이 곧 전역 구매 정지).
+                        val seen = recentTickets(purchaseSession)
+                        // 기대 금액 = 조회 이전 원장 스냅샷의 이 회차 지출 + 이번 시도(방금 기록했으므로 스냅샷엔 없다).
+                        if (isRoundCoveredByHistory(round, BudgetGuard.spentInRound(ledger, round) + attempt, seen)) {
+                            val settled = withContext(NonCancellable) {
+                                _lastPurchasedRound.value = round
+                                // 이 회차 티켓 전체를 싣는다 — 원장 응답의 구매일(eltOrdrDt)이 날짜 단위라 같은 회차의
+                                // 이전 구매와 이번 시도를 구분할 수 없다. confirmedByHistory로 그 사실을 화면에 알려
+                                // "1게임 샀는데 5게임 완료?"로 읽히지 않게 한다(실기기 검증에서 드러난 혼동).
+                                val r = PurchaseResult720(round, seen.filter { it.round == round }, attempt, confirmedByHistory = true)
+                                // 커밋이 하나라도 실패했거나 해제가 영속되지 않으면 PENDING은 마지막 남은 가드 —
+                                // 지우지 않고 성공(경고) 경로로 넘긴다.
+                                if (!committed.first || !committed.second ||
+                                    !runCatching { store.clearPendingPurchase() }.getOrDefault(false)
+                                ) {
+                                    runCatching { setAutoEnabled(false) }
+                                    throw PurchaseRecordFailedException(r)
+                                }
+                                r
+                            }
+                            // 확증됐으면 여기서 반환 — 아래 성공 보상 블록은 이미 이 안에서 끝냈다(원장 이중 기록 금지).
+                            return@withLock settled
+                        }
+                        throw PurchaseResultUnknownException(f.cause)   // 확증 실패 — 재시도 유도 금지
                     }
                 }
             }
@@ -529,6 +581,81 @@ class AppContainer(context: Context) {
         // 잔액 갱신은 락 밖 — 전용 세션(방금 로그인)으로 조회해 공유 세션 만료와 무관하게 정확. 실패해도 성공 표시 유지.
         runCatching { refreshBalance(purchaseAuth) }.onFailure { if (it is CancellationException) throw it }
         return result
+    }
+
+    /**
+     * 결과 대조용 최근 구매 내역([from] 세션은 로그인돼 있어야 한다).
+     * 조회 실패·세션 만료는 [HistoryService720]가 빈 목록으로 돌려주므로 그대로 fail-closed로 흐른다.
+     */
+    private suspend fun recentTickets(from: DhlotterySession): List<Ticket720> {
+        val to = java.time.LocalDate.now(Round720.KST)
+        return runCatching { HistoryService720(from, resultService720).fetchPurchases(to.minusDays(14), to) }
+            .onFailure { if (it is CancellationException) throw it }   // 취소를 빈 목록(=미확증)으로 오분류하지 않는다(F1)
+            .getOrDefault(emptyList())
+    }
+
+    /**
+     * 결과 불명 PENDING 해소 — [tickets]가 직전 결제를 확증하면 회차 가드·원장을 **재커밋한 뒤** PENDING을 해제한다.
+     * 확증에 성공해 해제까지 끝내면 그 회차 티켓을, 아니면 null을 돌려준다.
+     *
+     * 재커밋이 핵심: PENDING은 커밋 실패 시 마지막 남은 회차 가드라, 디스크 가드를 세우지 않고 지우면
+     * 프로세스 재시작 뒤 같은 회차를 다시 산다. **가드·원장·해제 셋 중 하나라도 실패하면 아무것도 지우지 않고**
+     * null을 돌려 PENDING에 백업 역할을 계속 맡긴다. 판정은 [isRoundCoveredByHistory](금액 대조, fail-closed).
+     *
+     * 호출부가 [PurchaseLock]을 잡은 상태를 전제한다(락 재진입 없음).
+     */
+    private suspend fun settlePending(
+        pending: SpendEntry,
+        pendingInLedger: Boolean,
+        userId: String,
+        tickets: List<Ticket720>,
+    ): List<Ticket720>? =
+        // 커밋~해제는 취소 불가 — 중간에 끊겨 "가드 미기록 + PENDING 해제"가 되면 이중결제 창이 열린다(F3와 동일 정책).
+        withContext(NonCancellable) {
+            val roundSpend = BudgetGuard.spentInRound(BudgetGuard.parseLedger(store.getSpendLedger()), pending.round)
+            val expected = expectedRoundAmount(roundSpend, pending.amount, pendingInLedger)
+            if (!isRoundCoveredByHistory(pending.round, expected, tickets)) return@withContext null
+            // 아래 셋은 instantPurchase 성공 경로의 `committed && ledgerOk` 불변식과 같은 계약 — 하나라도 실패하면 해제 금지.
+            if (!runCatching { store.setLastPurchase(pending.round, userId) }.getOrDefault(false)) return@withContext null
+            // 시도가 아직 원장에 없을 때만 보충 — 이미 반영됐으면 중복 계상 금지.
+            val ledgerOk = pendingInLedger || run {
+                val ok = runCatching { store.recordSpend(pending.round, pending.epochDay, pending.amount) }.getOrDefault(false)
+                // 보충 성공을 PENDING에 즉시 새긴다 — 이 갱신 없이 아래 해제가 실패하면 원장엔 반영됐는데 마커는
+                // false로 남아, 다음 판정이 같은 금액을 한 번 더 더해(기대 금액 과대) 그 회차가 영구 미확증이 된다.
+                if (ok) {
+                    runCatching {
+                        store.setPendingPurchase(
+                            pendingJson(pending.round, pending.epochDay, pending.amount, ledgerOk = true, owner = userId),
+                        )
+                    }
+                }
+                ok
+            }
+            if (!ledgerOk) return@withContext null
+            if (!runCatching { store.clearPendingPurchase() }.getOrDefault(false)) return@withContext null
+            // 인메모리 가드는 디스크 상태가 모두 확정된 뒤에 — 중간 실패로 빠져나갈 때 메모리만 앞서 나가지 않게 한다.
+            _lastPurchasedRound.value = pending.round
+            tickets.filter { it.round == pending.round }
+        }
+
+    /**
+     * 내역 탭 로드 결과로 PENDING 해소 시도([tickets]는 방금 조회한 목록 — 추가 네트워크 없음).
+     * 구매 경로가 이미 자기 대조로 빗장을 풀지만, 얼럿 문구가 안내하는 "내역 탭에서 확인"도 실제로
+     * 동작하게 해 사용자가 구매를 다시 누르지 않고도 풀리게 한다.
+     *
+     * [ticketsOwner]=그 목록을 조회한 계정. 조회는 락 밖에서 끝났으므로 락을 잡는 사이 계정이 바뀔 수 있다 —
+     * 다른 계정의 티켓으로 현재 계정 PENDING을 해소하면 오확정이므로, 락 안에서 소유자 일치를 재확인한다.
+     */
+    suspend fun reconcilePendingPurchase(tickets: List<Ticket720>, ticketsOwner: String?) = PurchaseLock.mutex.withLock {
+        withContext(Dispatchers.IO) {
+            val raw = store.getPendingPurchase()
+            val p = parsePending(raw)
+            val userId = store.getCredentials().userId
+            // 티켓을 조회한 계정 == 지금 계정 == PENDING을 만든 계정, 셋이 모두 같을 때만 해소한다.
+            if (p != null && userId != null && ticketsOwner == userId && canSettlePendingAs(parsePendingOwner(raw), userId)) {
+                settlePending(p, parsePendingLedgerOk(raw), userId, tickets)
+            }
+        }
     }
 
     // === 자동구매 설정 (write-through: 플로우 + SecureStore + 알람) ===
@@ -772,9 +899,55 @@ fun isLegacyAutoMigrationArtifact(config: NumberConfig720): Boolean =
     config.revision == 1L && !config.setMode &&
         config.slots.none { it is Slot720.SemiAuto || it is Slot720.Manual }
 
-/** connPro 선기록 JSON {round, epochDay, amount} — check(pending=…)와 동일 필드. */
-private fun pendingJson(round: Int, epochDay: Long, amount: Int): String =
-    org.json.JSONObject().put("round", round).put("epochDay", epochDay).put("amount", amount).toString()
+/**
+ * connPro 선기록 JSON {round, epochDay, amount, ledgerOk, owner} — 앞 셋은 check(pending=…)와 동일 필드.
+ * [ledgerOk]=이 시도 금액이 **원장에 이미 기록됐는가**. 결과 불명 확증 시 기대 금액을 정확히 계산하는 데 쓴다
+ * ([expectedRoundAmount] 참조) — 없거나 false면 미기록으로 보수 평가하므로 레거시 PENDING도 안전하다.
+ * [owner]=이 PENDING을 만든 계정. 해소 판정은 이 계정의 내역으로만 해야 한다([canSettlePendingAs] 참조).
+ */
+fun pendingJson(round: Int, epochDay: Long, amount: Int, ledgerOk: Boolean = false, owner: String? = null): String =
+    org.json.JSONObject().put("round", round).put("epochDay", epochDay).put("amount", amount)
+        .put("ledgerOk", ledgerOk).apply { if (owner != null) put("owner", owner) }.toString()
+
+/** PENDING JSON의 원장 반영 마커 — 없거나 손상이면 false(미기록으로 보수 평가, fail-closed). */
+fun parsePendingLedgerOk(json: String?): Boolean {
+    if (json.isNullOrBlank()) return false
+    return runCatching { org.json.JSONObject(json) }.getOrNull()?.optBoolean("ledgerOk", false) ?: false
+}
+
+/** PENDING JSON의 소유 계정 — 없거나 손상이면 null(레거시 기록). */
+fun parsePendingOwner(json: String?): String? {
+    if (json.isNullOrBlank()) return null
+    val o = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return null
+    return o.optString("owner").takeIf { it.isNotBlank() }
+}
+
+/**
+ * 이 PENDING을 [currentUserId] 계정의 내역으로 해소해도 되는가(순수).
+ *
+ * PENDING은 계정 무관 단일 슬롯이라 계정 A의 미결이 남은 채 B로 전환될 수 있다. 그 상태로 B의 내역·원장을
+ * 써서 확증하면 A의 시도를 B의 티켓이 증명하는 꼴이 되고, 회차 가드가 `setLastPurchase(round, B)`로
+ * 스탬프되면서 [accountScopedRound]가 A 복귀 시 가드를 무효로 판정한다 → A가 같은 회차를 재구매(이중결제).
+ *
+ * 레거시(owner 없는) PENDING은 **해소하지 않는다** — 회차 가드의 owner=null 백필과는 방향이 반대다.
+ * 그쪽은 "못 막으면 재구매"라 신뢰가 안전 측이지만, 여기서는 "잘못 풀면 재구매"라 불신이 안전 측이다.
+ * 미해소 PENDING은 그 회차를 봉쇄할 뿐 돈을 잃지 않는다.
+ */
+fun canSettlePendingAs(pendingOwner: String?, currentUserId: String?): Boolean =
+    pendingOwner != null && currentUserId != null && pendingOwner == currentUserId
+
+/**
+ * 결과 불명 확증에 쓸 "이 회차에 청구된 것으로 계산한 총액"(순수).
+ *
+ * [roundSpend]=원장에 기록된 이 회차 지출, [pendingAmount]=미결 시도 금액,
+ * [pendingInLedger]=그 시도가 이미 [roundSpend]에 포함됐는가.
+ *
+ * 포함됐으면 [roundSpend]가 곧 총액이고, 아니면 더해야 한다. `max()`로 뭉개면 안 된다 —
+ * "첫 구매 5,000 성공(원장 기록) + 추가 1,000 결과 불명(원장 기록 실패)"에서 max는 5,000을 내놓아
+ * 첫 구매 티켓 5장만으로 추가 구매가 오확정되고, 이 변경이 막으려던 이중결제 창이 그대로 열린다.
+ */
+fun expectedRoundAmount(roundSpend: Int, pendingAmount: Int, pendingInLedger: Boolean): Int =
+    if (pendingInLedger) roundSpend else roundSpend + pendingAmount
 
 /** PENDING JSON → SpendEntry(없거나 손상·round 필드 없음이면 null). */
 fun parsePending(json: String?): SpendEntry? {
@@ -787,6 +960,38 @@ fun parsePending(json: String?): SpendEntry? {
     val epochDay = o.optLong("epochDay", -1)
     if (amount < 0 || epochDay < 0) return null
     return SpendEntry(o.optInt("round"), epochDay, amount)
+}
+
+/**
+ * 서버 구매 내역이 이 회차에 "청구된 것으로 계산한 금액"([expectedAmount])을 **전부** 설명하는가(순수).
+ *
+ * 결과 불명(서버 응답 미확인) 상황의 유일한 확증 수단 — 앱이 결제 성립을 스스로 판정하지 못하면
+ * 사용자에게 "구매 결과 확인 필요"를 떠넘기고 그 회차 재구매를 봉쇄하는 것 말고 할 수 있는 게 없다.
+ *
+ * 티켓 **존재**만으로 판정하면 안 된다 — "성공한 첫 구매 + 결과 불명 추가 구매"에서 첫 구매 티켓이 추가
+ * 구매를 증명해 이중결제 창이 열린다. `서버 금액 ≥ 기대 금액`이어야 우리가 청구로 계산한 결제가 전부
+ * 서버에 존재한다 = 미확인 결제 없음.
+ *
+ * fail-closed: 세션 만료·조회 실패는 [HistoryService720]가 빈 목록으로 돌려주므로 serverAmount=0 → false.
+ * 부분 성공으로 티켓이 모자란 경우도 false — 미확정 게임이 남아 PENDING을 유지해야 한다.
+ *
+ * **호출부 계약**: true라고 곧바로 clearPendingPurchase 하면 안 된다. PENDING은 "커밋 실패 시 백업 가드"
+ * 역할도 겸하므로(결제 성공 + setLastPurchase/recordSpend 실패 → PENDING만 남는 상태), 해제 전에
+ * `setLastPurchase`·`recordSpend`를 **재커밋**하고 둘 다 성공했을 때만 해제해야 한다(instantPurchase의
+ * `committed && ledgerOk` 불변식과 동일). 해제는 진행 중 구매와 경합하지 않도록 [PurchaseLock] 안에서.
+ *
+ * 알려진 한계(수용): 이 판정은 **금액 커버리지**이지 인과 증명이 아니다. 티켓이 이번 시도로 생겼음을
+ * 확인할 식별자가 없다(결과 불명이라 주문번호를 못 읽었고, 원장 응답도 주문번호를 싣지 않는다).
+ * 따라서 같은 계정이 **앱 밖 채널**(동행복권 웹·다른 기기)로 같은 회차를 사면 serverAmount가 부풀어,
+ * 실제로는 실패한 앱 시도가 확증될 수 있다 — "앱이 이 계정의 유일한 구매 경로"라는 가정 위에 선 설계다.
+ * (내역 조회는 로그인 계정 단위라 *다른 계정*의 티켓이 섞이는 경로는 없다.) 결제 전 티켓 스냅샷을 남겨
+ * 증분만 보는 방식이 정답이지만 매 구매에 조회 왕복이 붙어 수용하지 않았다. 오확정 방향은 "실패를 성공으로"
+ * 이며 이중결제 방향은 아니다 — 회차 가드가 서고 PENDING이 풀릴 뿐이다.
+ */
+fun isRoundCoveredByHistory(round: Int, expectedAmount: Int, tickets: List<Ticket720>): Boolean {
+    if (expectedAmount <= 0) return false
+    val serverAmount = tickets.count { it.round == round } * 1000   // 720은 1게임=1,000원(세트 5게임=5,000원)
+    return serverAmount > 0 && serverAmount >= expectedAmount
 }
 
 /** 예산 한도 초과로 결제에 진입하지 못한 경우 — 재시도 유도 금지. daily/weekly 값만 담고 표시는 UI가 리소스로 매핑. */

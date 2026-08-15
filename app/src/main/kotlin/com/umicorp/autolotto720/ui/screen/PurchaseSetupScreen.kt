@@ -1265,10 +1265,24 @@ private fun InstantPurchaseDialogs(state: InstantState, vm: PurchaseSetupViewMod
         )
         is InstantState.Success -> AlertDialog(
             onDismissRequest = { vm.dismissInstant() },
-            title = { Text(stringResource(R.string.instantSuccessTitle)) },
+            // 결제 응답이 아니라 내역 대조로 확정된 결과는 제목·본문을 구분한다 — 티켓이 이번 시도분이 아니라
+            // 그 회차 전체라서, 같은 문구를 쓰면 "1게임 샀는데 5게임 완료?"로 읽힌다(실기기 검증에서 확인).
+            title = { Text(stringResource(if (state.result.confirmedByHistory) R.string.instantSuccessTitleFromHistory else R.string.instantSuccessTitle)) },
             text = {
                 Column {
-                    Text(stringResource(R.string.instantSuccessBody, state.result.round, state.result.tickets.size))
+                    Text(
+                        stringResource(
+                            if (state.result.confirmedByHistory) R.string.instantSuccessBodyFromHistory else R.string.instantSuccessBody,
+                            state.result.round, state.result.tickets.size,
+                        )
+                    )
+                    if (state.result.confirmedByHistory) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            stringResource(R.string.instantSuccessFromHistoryNote),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     Spacer(Modifier.height(12.dp))
                     // 지정번호 점유 + '구매 포기' 정책이면 산 게임이 0 — 오류가 아니라 정책상 정상 결과.
                     if (state.result.tickets.isEmpty()) {

@@ -339,8 +339,21 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
             try {
                 val end = LocalDate.now()
                 val start = end.minusMonths(WINDOW_MONTHS)
-                _tickets.value = container.historyService720.fetchPurchases(start, end)
+                // 조회 **시작 전**에 계정을 고정한다 — 조회 도중 전환되면 loaded는 이전 계정 것인데
+                // shownUser는 새 계정이 되어, 해소 측 소유자 대조가 통과해 버린다(귀속 오염).
+                val owner = shownUser
+                val loaded = container.historyService720.fetchPurchases(start, end)
                     .sortedByDescending { it.round }
+                _tickets.value = loaded
+                // 결과 불명 PENDING을 이 조회 결과로 해소 — "내역 탭에서 확인 후 다시 시도" 안내가 실제로 성립하게 한다.
+                // loadJob 밖 별도 코루틴: 구매 진행 중이면 PurchaseLock 대기가 길어져 내역 스피너를 잡아둔다.
+                // 실패는 무시(다음 로드가 재시도) — 내역 표시가 목적인 화면을 해소 실패로 막지 않는다.
+                // owner를 함께 넘긴다 — 해소는 락을 잡은 뒤 실행되므로 그 사이 계정이 바뀌면 이전 계정의
+                // 티켓으로 현재 계정 PENDING을 풀 수 있다(오확정). 컨테이너가 락 안에서 일치를 재확인한다.
+                viewModelScope.launch {
+                    runCatching { container.reconcilePendingPurchase(loaded, owner) }
+                        .onFailure { if (it is CancellationException) throw it }
+                }
                 oldestStart = start
                 windowsLoaded = 1
                 _canLoadMore.value = true

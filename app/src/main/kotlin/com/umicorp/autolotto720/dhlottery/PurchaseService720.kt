@@ -404,6 +404,12 @@ data class PurchaseResult720(
     val tickets: List<Ticket720>,
     val amount: Int,
     val partialFailure: PartialFailure? = null,
+    /**
+     * 결제 응답이 아니라 **구매 내역 대조**로 확정된 결과인가(결과 불명 복구 경로).
+     * true면 [tickets]는 이번 시도분이 아니라 **그 회차 전체** — 원장 응답의 구매일이 날짜 단위라
+     * 같은 회차의 이전 구매와 이번 시도를 구분할 수 없다. 화면은 이 플래그로 문구를 갈라 오해를 막는다.
+     */
+    val confirmedByHistory: Boolean = false,
 )
 
 /** 다게임 구매 중단 — [failedGames]=결제되지 않은 게임 수(실패 게임 + 미시도 잔여), [cause]=첫 실패 원인. */

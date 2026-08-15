@@ -8,6 +8,7 @@ import com.umicorp.autolotto720.accountScopedRound
 import com.umicorp.autolotto720.attemptAmount
 import com.umicorp.autolotto720.classifyPurchaseFailure
 import com.umicorp.autolotto720.parsePending
+import com.umicorp.autolotto720.pendingJson
 import com.umicorp.autolotto720.data.BudgetGuard
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.SecureStore
@@ -20,7 +21,6 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import kotlin.coroutines.cancellation.CancellationException
@@ -184,9 +184,8 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 // connPro 진입 전 선기록 — 결과 불명·프로세스 사망 시 이 회차 재결제 차단. login(무결제) 뒤·purchase(connPro) 앞이라
                 // "connPro 진입 전 선기록" 불변식은 유지되고 즉시구매(login 뒤 선기록)와 대칭. login 일시 실패는 PENDING 없이 정상 재시도된다.
                 // 쓰기 실패는 무결제라 재시도 가능해야 하므로 별도 step([purchase] 접두 아님 → 비-ambiguous, N12).
-                if (!store.setPendingPurchase(
-                        JSONObject().put("round", round).put("epochDay", today).put("amount", attempt).toString())
-                ) {
+                // JSON은 즉시구매와 같은 헬퍼로 — 선기록 시점엔 원장 미반영이므로 ledgerOk=false(기본).
+                if (!store.setPendingPurchase(pendingJson(round, today, attempt, owner = userId))) {
                     throw Exception("결제 준비에 실패했습니다.")   // 무결제 — 비-ambiguous라 재시도 가능
                 }
 
@@ -201,7 +200,10 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                         is PurchaseFailure.Unknown -> withContext(NonCancellable) {   // 결과 불명 — 가드 커밋 + 전액 원장 + PENDING 유지(즉시구매와 대칭, CE가 보상을 끊지 못하게)
                             // money-path 방호: 원장/가드 commit 예외가 아래 [purchase] 래핑을 이탈하지 않게 runCatching(즉시구매와 대칭).
                             runCatching { store.setLastPurchase(round, userId) }
-                            runCatching { store.recordSpend(round, today, attempt) }
+                            val ledgerOk = runCatching { store.recordSpend(round, today, attempt) }.getOrDefault(false)
+                            // 원장 반영 여부를 PENDING에 남긴다 — 이후 즉시구매·내역 탭의 해소가 기대 금액을 정확히
+                            // 계산하려면 필요하다(마커가 없으면 미기록으로 보수 평가돼 워커 PENDING이 잘 안 풀린다).
+                            if (ledgerOk) runCatching { store.setPendingPurchase(pendingJson(round, today, attempt, ledgerOk = true, owner = userId)) }
                         }
                     }
                     throw Exception(purchaseError.message ?: "$purchaseError")   // [purchase] 래핑 → 비재시도

@@ -235,6 +235,9 @@
     <string name="instantInProgress">Purchasing…</string>
     <string name="instantSuccessTitle">⚡ Purchase Complete!</string>
     <string name="instantSuccessBody">Round %1$d · %2$d game(s)</string>
+    <string name="instantSuccessTitleFromHistory">⚡ Purchase Confirmed</string>
+    <string name="instantSuccessBodyFromHistory">Round %1$d · %2$d game(s) per your history</string>
+    <string name="instantSuccessFromHistoryNote">The server didn\'t respond, so this was confirmed from your purchase history. If you bought more than once for this round, earlier purchases are listed too.</string>
     <string name="instantNoTickets">Your chosen numbers were already sold, so nothing was bought under the \'give up\' policy.</string>
     <string name="instantErrorTitle">Purchase Failed</string>
     <string name="instantUnknownTitle">Purchase result needs checking</string>

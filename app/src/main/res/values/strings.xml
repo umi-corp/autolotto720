@@ -243,6 +243,9 @@
     <string name="instantInProgress">구매 중…</string>
     <string name="instantSuccessTitle">⚡ 구매 완료!</string>
     <string name="instantSuccessBody">제 %1$d회 · %2$d게임</string>
+    <string name="instantSuccessTitleFromHistory">⚡ 구매 확인됨</string>
+    <string name="instantSuccessBodyFromHistory">제 %1$d회 · 내역 기준 %2$d게임</string>
+    <string name="instantSuccessFromHistoryNote">서버 응답이 오지 않아 구매 내역으로 확인했습니다. 이번 회차에 여러 번 구매했다면 이전 구매도 함께 표시됩니다.</string>
     <string name="instantNoTickets">지정한 번호가 이미 판매되어 \'구매 포기\' 정책에 따라 구매하지 않았습니다.</string>
     <string name="instantErrorTitle">구매 실패</string>
     <string name="instantUnknownTitle">구매 결과 확인 필요</string>
