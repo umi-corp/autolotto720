@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG 전용 — mitmproxy·Charles로 dhlottery 응답을 변조해 "결제 결과 불명" 경로를 재현하기 위한 설정.
+  minSdk 31에서는 사용자 설치 CA가 기본으로 신뢰되지 않아, 이 파일 없이는 프록시 가로채기가 TLS 실패로
+  끝난다 — 요청이 서버에 도달하지 않으므로 "서버는 접수했는데 앱이 응답을 못 읽은" 상황을 만들 수 없다.
+
+  release 소스셋에는 없다(debug 소스셋 전용) — 배포 빌드는 시스템 CA만 신뢰하는 기본 동작 그대로다.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

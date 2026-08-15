@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEBUG 전용 오버레이 — 프록시 가로채기용 사용자 CA 신뢰만 얹는다(main 매니페스트는 이 속성을 쓰지 않아 병합 충돌 없음). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>
