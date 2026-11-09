@@ -21,10 +21,9 @@
   --gold-ink: #7a5900;
   --green: #22c55e;
   --blue: #24406b;
-  --cta: linear-gradient(135deg, var(--navy), #24406b);
+  --cta: linear-gradient(135deg, var(--navy), var(--blue));
   --on-cta: #ffffff;
   --navy: #16233f;
-  --jo: #0b7d45;
   --hero-grad: linear-gradient(120deg, #1e2d50, #0e9e57 55%, #26d967);
   --headline-grad: linear-gradient(120deg, #1e2d50, #0e9e57 60%, #0b8a4c);
   --shadow-1: 0 1px 2px rgba(22, 35, 63, .06), 0 4px 14px rgba(22, 35, 63, .06);
@@ -104,7 +103,8 @@ p { margin: 0; }
 [data-theme="light"] .theme-btn .sun, [data-theme="dark"] .theme-btn .moon { display: none; }
 .nav-cta { padding: 8px 16px; border-radius: 999px; background: var(--cta); color: var(--on-cta); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
 @media (max-width: 900px) { .nav-links { display: none; } }
-@media (max-width: 420px) { .nav-right { gap: 10px; } .nav-cta { padding: 7px 12px; } .brand span { display: none; } }
+/* 앱 이름이 길어 ja 내비가 470px 아래에서 넘친다 */
+@media (max-width: 480px) { .nav-right { gap: 10px; } .nav-cta { padding: 7px 12px; } .brand span { display: none; } }
 
 /* ───────── 버튼 ───────── */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; padding: 0 24px; border-radius: 16px; font-size: 16px; font-weight: 600; text-decoration: none; transition: transform .15s, box-shadow .15s; }
@@ -116,14 +116,16 @@ p { margin: 0; }
 .apk-meta { margin-top: 10px; color: var(--text-3); font-size: 13px; font-variant-numeric: tabular-nums; }
 
 /* ───────── 연금복권 번호 (앱 JoNumberDisplay: 조 알약 + 흰 공·자리별 테두리) ───────── */
-.ticket { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 28px 0 32px; padding: 0; list-style: none; }
-.jo { display: inline-flex; align-items: center; height: 36px; margin-right: 6px; padding: 0 14px; border-radius: 999px; background: var(--jo); color: #fff; font-size: 15px; font-weight: 700; white-space: nowrap; }
+/* 공이 남은 폭에 맞춰 줄어 어느 폭·언어에서도 조 + 6자리가 한 줄에 남는다 */
+.ticket { display: flex; align-items: center; gap: 8px; margin: 28px 0 32px; padding: 0; list-style: none; }
+.ticket li:not(:first-child) { flex: 0 1 44px; min-width: 0; }
+.jo { display: inline-flex; align-items: center; height: 36px; margin-right: 6px; padding: 0 14px; border-radius: 999px; background: #0b7d45; color: #fff; font-size: 15px; font-weight: 700; white-space: nowrap; }
 .pb {
   --c: #adb0ba;
   display: inline-grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 100%;
+  aspect-ratio: 1;
   border: 3px solid var(--c);
   border-radius: 50%;
   background: #fff;
@@ -139,13 +141,7 @@ p { margin: 0; }
 .ticket li:nth-child(4) .pb { --c: #f3c00f; }
 .ticket li:nth-child(5) .pb { --c: #2a9bdb; }
 .ticket li:nth-child(6) .pb { --c: #a87ad7; }
-/* 좁은 화면에서는 조 + 6자리가 한 줄에 남도록 공이 남은 폭에 맞춰 줄어든다 */
-@media (max-width: 420px) {
-  .ticket { flex-wrap: nowrap; gap: 5px; }
-  .ticket li:not(:first-child) { flex: 0 1 36px; min-width: 0; }
-  .pb { width: 100%; height: auto; aspect-ratio: 1; font-size: 16px; border-width: 2.5px; }
-  .jo { height: 30px; margin-right: 2px; padding: 0 10px; font-size: 13px; }
-}
+@media (max-width: 420px) { .ticket { gap: 5px; } .pb { font-size: 16px; border-width: 2.5px; } .jo { height: 30px; margin-right: 2px; padding: 0 10px; font-size: 13px; } }
 @keyframes drop { from { opacity: 0; transform: translateY(-14px) scale(.9); } to { opacity: 1; transform: none; } }
 .js .ticket li { animation: drop .5s cubic-bezier(.2, .8, .2, 1.2) backwards; animation-delay: calc(var(--i) * 70ms + 150ms); }
 @media (prefers-reduced-motion: reduce) { .js .ticket li { animation: none; } }

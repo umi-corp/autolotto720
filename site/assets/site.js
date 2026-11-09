@@ -25,7 +25,7 @@
   const rand = (n) => Math.floor(Math.random() * n);
   document.querySelectorAll('[data-ticket]').forEach((list) => {
     const jo = list.querySelector('.jo');
-    jo.textContent = jo.dataset.fmt.replace('{n}', 1 + rand(5));
+    jo.textContent = jo.textContent.replace(/\d/, 1 + rand(5));
     list.querySelectorAll('.pb').forEach((b) => { b.textContent = rand(10); });
   });
 
