@@ -1,0 +1,24 @@
+# AutoLotto720
+
+> AutoLotto720 is a free, open-source Android app (Android 12+) from UMI Corp that buys Korean Pension Lottery 720+ (연금복권720+) tickets from DHLottery (동행복권, dhlottery.co.kr) on a weekly schedule and checks the results after the Thursday draw. It is not an official DHLottery app.
+
+- Names: AutoLotto720; 오토로또720 in Korean.
+- Requirements: a DHLottery account and enough deposit (예치금) for the purchase; one ticket costs 1,000 KRW. Lottery purchase is not allowed under age 19.
+- Numbers: up to 5 tickets (games A–E) per draw. Per slot, each game is Full Auto, auto-assigned number in a chosen group (조, 1–5), or a manual group and 6-digit number; manual numbers stay fixed every week, automatic ones are new every week. All-groups set buys the same automatic number in groups 1–5 (5 tickets, 5,000 KRW).
+- Sold-out numbers: if a chosen number is already sold, the app reassigns group and number (default), keeps the group and reassigns the number, or skips the purchase.
+- Auto purchase: on a chosen weekday and time (default Friday 09:00), without opening the app; Thursday 17:00–22:00 cannot be scheduled because sales are paused. Needs an internet connection; excluding the app from battery optimization is recommended.
+- Safety: daily and per-draw budget limits (default 5,000 KRW each), duplicate purchase guard per draw, and no retry when the payment result is unknown (the app checks purchase history instead).
+- Buy Now: buys the saved games right away; Buy More adds automatic games to a draw already bought. DHLottery limits online purchases to 5 tickets (5,000 KRW) per draw and enforces the limit on its server.
+- Results: the draw is Thursday 19:05; the app checks results every Thursday at 21:00 and shows rank and prize per game with a push notification. Low-deposit alert once a day at or below 5,000 / 10,000 / 20,000 KRW or a custom amount (default 5,000).
+- History: last 3 months loaded automatically, up to 1 year on request.
+- Security: account credentials are encrypted with Android Keystore and stored only on the device; they are used only to sign in to DHLottery and are not sent to any AutoLotto720 or third-party server.
+- Distribution: not on Google Play (Google Play's gambling policy does not allow lottery purchase apps). The APK is published on GitHub Releases (https://github.com/umi-corp/autolotto720/releases/latest); the app updates itself after verifying the package name and signature.
+- Screen languages: Korean, English, Japanese (push notifications are Korean only). No iPhone app.
+- License: MIT. Source: https://github.com/umi-corp/autolotto720
+
+## Pages
+
+- [AutoLotto720 (English)](https://autolotto720.umicorp.kr/en/): features, flow, setup steps and FAQ
+- [AutoLotto720 (한국어)](https://autolotto720.umicorp.kr/)
+- [AutoLotto720 (日本語)](https://autolotto720.umicorp.kr/ja/)
+- [AutoLotto](https://autolotto.umicorp.kr): sibling app for Lotto 6/45
