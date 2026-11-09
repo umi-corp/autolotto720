@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://autolotto720.umicorp.kr/sitemap.xml
