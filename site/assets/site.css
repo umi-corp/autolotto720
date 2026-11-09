@@ -24,8 +24,9 @@
   --cta: linear-gradient(135deg, var(--navy), var(--blue));
   --on-cta: #ffffff;
   --navy: #16233f;
-  --hero-grad: linear-gradient(120deg, #1e2d50, #0e9e57 55%, #26d967);
-  --headline-grad: linear-gradient(120deg, #1e2d50, #0e9e57 60%, #0b8a4c);
+  /* 앱 heroGradient 보다 어둡게: 다운로드 카드의 흰 글자 대비 4.5:1 이상 */
+  --hero-grad: linear-gradient(120deg, #1e2d50, #0a8246 45%, #086a3a);
+  --headline-grad: var(--hero-grad);
   --shadow-1: 0 1px 2px rgba(22, 35, 63, .06), 0 4px 14px rgba(22, 35, 63, .06);
   --shadow-2: 0 18px 50px rgba(22, 35, 63, .14);
   --nav-bg: rgba(238, 242, 247, .78);
@@ -103,8 +104,8 @@ p { margin: 0; }
 [data-theme="light"] .theme-btn .sun, [data-theme="dark"] .theme-btn .moon { display: none; }
 .nav-cta { padding: 8px 16px; border-radius: 999px; background: var(--cta); color: var(--on-cta); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
 @media (max-width: 900px) { .nav-links { display: none; } }
-/* 앱 이름이 길어 ja 내비가 470px 아래에서 넘친다 */
-@media (max-width: 480px) { .nav-right { gap: 10px; } .nav-cta { padding: 7px 12px; } .brand span { display: none; } }
+/* 앱 이름이 길어 ja 내비가 470px 아래에서 넘친다. 이름은 화면에서만 숨기고 링크 이름으로 남긴다 */
+@media (max-width: 480px) { .nav-right { gap: 10px; } .nav-cta { padding: 7px 12px; } .brand span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
 
 /* ───────── 버튼 ───────── */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; padding: 0 24px; border-radius: 16px; font-size: 16px; font-weight: 600; text-decoration: none; transition: transform .15s, box-shadow .15s; }
@@ -242,10 +243,10 @@ p { margin: 0; }
 
 /* 다운로드 */
 .outro { padding: 32px 0 96px; }
-.outro-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: center; padding: 48px; border-radius: 28px; background: radial-gradient(60% 120% at 100% 0%, rgba(255, 255, 255, .18), transparent 60%), var(--hero-grad); color: #fff; }
+.outro-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: center; padding: 48px; border-radius: 28px; background: radial-gradient(60% 120% at 100% 0%, rgba(255, 255, 255, .1), transparent 60%), var(--hero-grad); color: #fff; }
 .outro-desc { margin-top: 10px; opacity: .9; }
 .notes { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 0; padding: 0; list-style: none; }
-.notes li { padding: 4px 12px; border-radius: 999px; background: rgba(255, 255, 255, .16); font-size: 13px; }
+.notes li { padding: 4px 12px; border-radius: 999px; background: rgba(14, 19, 48, .28); font-size: 13px; }
 .outro .btn { background: #fff; color: var(--navy); }
 .outro .apk-meta { color: #fff; text-align: center; text-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
 @media (max-width: 760px) {
