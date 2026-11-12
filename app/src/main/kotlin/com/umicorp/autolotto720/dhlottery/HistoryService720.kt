@@ -7,6 +7,7 @@ import com.umicorp.autolotto720.data.lumpPrize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.IOException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -21,7 +22,10 @@ import java.time.format.DateTimeFormatter
  *   게임별 등수·당첨금은 [resolveRanks]가 당첨번호로 재판정한다.
  *
  * 흐름: 마이페이지 원장 방문(Referer용) → selectMyLotteryledger.do(GET, 기간·페이징) →
- *       LP72 항목의 gmInfo를 게임별 [Ticket720]으로 평탄화. 세션 만료(HTML)면 빈 목록.
+ *       LP72 항목의 gmInfo를 게임별 [Ticket720]으로 평탄화.
+ *
+ * **실패 구분**: 동행복권에 닿지 못한 실패(타임아웃·연결끊김·5xx·JSON 자리 HTML)는 [IOException]으로
+ * 전파한다 — 빈 목록으로 삼키면 화면이 "구매 기록이 없습니다"로 위장된다(실제 사용자 리포트).
  *
  * 읽기전용 — 머니패스가 아니므로 [Feature720.PURCHASE_ENABLED] 게이트와 무관하게 항상 조회한다.
  */
@@ -52,10 +56,16 @@ class HistoryService720(
                     "X-Requested-With" to "XMLHttpRequest",
                     "Referer" to session.base(ApiConstants.MYPAGE_LEDGER),
                 ),
-            ).use { it.body?.string().orEmpty() }
+            ).use {
+                if (it.code >= 500) throw IOException("history_list_http_${it.code}")
+                it.body?.string().orEmpty()
+            }
 
-            // HTML(세션 만료)이면 JSONObject가 던진다 → 빈 목록으로 안전화.
-            val items = runCatching { JSONObject(listBody).optJSONObject("data")?.optJSONArray("list") }.getOrNull()
+            // JSON 자리에 HTML(세션 만료·점검 페이지)을 빈 목록으로 삼키면 화면이
+            // "구매 기록이 없습니다"로 위장된다(실제 사용자 리포트). 연결 실패는 전부 전파한다.
+            if (!listBody.trimStart().startsWith("{")) throw IOException("history_list_not_json")
+
+            val items = JSONObject(listBody).optJSONObject("data")?.optJSONArray("list")
                 ?: return@withContext emptyList()
 
             val tickets = mutableListOf<Ticket720>()

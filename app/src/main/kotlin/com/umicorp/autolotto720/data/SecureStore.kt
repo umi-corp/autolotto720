@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.umicorp.autolotto720.support.newSupportKey
 
 /**
  * 보안저장 키 문자열 — Flutter `SecureStorageService`와 1:1.
@@ -39,6 +40,10 @@ object SecureKeys {
      *  ponytail: 계정 스코프 없음 — 멀티계정에서 A의 미결 PENDING이 B의 같은 회차 구매를 과차단할 수 있으나
      *  무결제(안전측)라 수용. 빈발 시 userId를 넣어 계정 일치 시에만 차단으로 승급. */
     const val PENDING_PURCHASE = "pending_purchase"
+
+    /** 네이티브 전용 — 문의 게시판 기기 키(로그 금지)와 상태 "확인 필요". ALL(이관 목록) 미포함. */
+    const val SUPPORT_KEY = "support_key"
+    const val SUPPORT_CHECK_NEEDED = "support_check_needed"
 
     /** 마이그레이션·일괄 처리용 전체 키 목록. */
     val ALL = listOf(
@@ -223,6 +228,25 @@ class SecureStore(context: Context) {
     fun setPendingPurchase(json: String): Boolean = prefs.edit().putString(SecureKeys.PENDING_PURCHASE, json).commit()
     /** money-path: commit() 반환으로 해제 성공을 확인 — false면 PENDING이 디스크에 남아 호출부가 "해소됨"으로 보고하면 안 된다. */
     fun clearPendingPurchase(): Boolean = prefs.edit().remove(SecureKeys.PENDING_PURCHASE).commit()
+
+    // === 문의 게시판 ===
+
+    fun getSupportKey(): String? = read(SecureKeys.SUPPORT_KEY)
+
+    fun getSupportCheckNeeded(): Boolean = read(SecureKeys.SUPPORT_CHECK_NEEDED) == "true"
+
+    fun setSupportCheckNeeded(v: Boolean) = putString(SecureKeys.SUPPORT_CHECK_NEEDED, v.toString())
+
+    /** "문의"를 누를 때: 키가 없으면 만들고 "확인 필요"를 켠다. 연속 탭에도 키는 하나. */
+    @Synchronized
+    fun startSupportInquiry(): String {
+        val key = getSupportKey() ?: newSupportKey()
+        prefs.edit()
+            .putString(SecureKeys.SUPPORT_KEY, key)
+            .putString(SecureKeys.SUPPORT_CHECK_NEEDED, "true")
+            .commit()
+        return key
+    }
 
     // === 전체 초기화 ===
 
