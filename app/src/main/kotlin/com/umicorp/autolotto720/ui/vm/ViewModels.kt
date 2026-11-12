@@ -277,8 +277,12 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
     val loadingMore: StateFlow<Boolean> = _loadingMore.asStateFlow()
     private val _canLoadMore = MutableStateFlow(false)
     val canLoadMore: StateFlow<Boolean> = _canLoadMore.asStateFlow()
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
+    /**
+     * 조회 실패 여부. 메시지(String?)가 아니라 Boolean인 이유: 예외의 message가 null이면
+     * 실패가 통째로 사라져 화면이 "기록 없음"으로 위장됐다(실제 사용자 리포트).
+     */
+    private val _loadFailed = MutableStateFlow(false)
+    val loadFailed: StateFlow<Boolean> = _loadFailed.asStateFlow()
 
     /** 회차 → 당첨번호(헤더 미니볼용). 추첨완료 회차만 채워진다 — 없으면 헤더 볼 생략. */
     private val _winningNumbers = MutableStateFlow<Map<Int, WinningNumbers720>>(emptyMap())
@@ -324,7 +328,7 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
         loadJob?.cancel()
         _tickets.value = emptyList()
         _canLoadMore.value = false
-        _error.value = null   // 이전 계정의 오류 문구 잔존 방지(crosscheck R2)
+        _loadFailed.value = false   // 이전 계정의 오류 표시 잔존 방지(crosscheck R2)
         oldestStart = LocalDate.now()
         windowsLoaded = 0
     }
@@ -335,7 +339,7 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             _loading.value = true
-            _error.value = null
+            _loadFailed.value = false
             try {
                 val end = LocalDate.now()
                 val start = end.minusMonths(WINDOW_MONTHS)
@@ -361,7 +365,11 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
             } catch (e: CancellationException) {
                 throw e   // 계정 전환 취소가 오류 문구로 표시되지 않게(crosscheck R1 F4)
             } catch (e: Exception) {
-                _error.value = e.message  // 5b가 historyLoadError 템플릿으로 로컬라이즈
+                // HistoryService720이 연결 실패만 던진다(정상 응답 속 개별 스킵은 삼킨다) — 화면은 연결 안내를 띄운다.
+                // 이전 목록도 비운다: 남겨두면 새로고침 실패가 "오래된 목록 = 최신"으로 보여
+                // 원 리포트("오늘 구매했는데 기록에 없다")가 그대로 재현된다.
+                _tickets.value = emptyList()
+                _loadFailed.value = true
                 _canLoadMore.value = false
             } finally {
                 // 취소된 구 Job의 늦은 finally가 새 로드의 스피너를 끄지 않게(crosscheck R3 H3).

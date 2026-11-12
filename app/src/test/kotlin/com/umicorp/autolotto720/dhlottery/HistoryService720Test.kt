@@ -11,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.IOException
 
 /**
  * HistoryService720 테스트 — 라이브 캡처로 확정한 원장 형식(data.list[], ltGdsCd="LP72",
@@ -104,10 +105,44 @@ class HistoryService720Test {
         assertTrue(t.checked)
     }
 
-    @Test
-    fun `session expired html yields empty list`() = runBlocking {
+    // === 연결 실패는 빈 목록으로 위장하지 않는다 (사용자 리포트: 구매는 됐는데 "기록이 없습니다") ===
+
+    /**
+     * 이전 계약은 "세션 만료 HTML → 빈 목록"이었다. 그게 곧 사용자가 본 거짓말이다 —
+     * 화면이 실패를 "구매 기록이 없습니다"로 바꿔 보여줬다. 이제는 던진다.
+     */
+    @Test(expected = IOException::class)
+    fun `session expired html throws instead of yielding empty list`(): Unit = runBlocking {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(req: RecordedRequest) = MockResponse().setBody("<html>login required</html>")
+        }
+        service.fetchRecentPurchases()
+        Unit
+    }
+
+    /** 타임아웃과 같은 IOException 경로를 5xx로 재현한다. */
+    @Test(expected = IOException::class)
+    fun `list 5xx throws instead of yielding empty list`(): Unit = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(req: RecordedRequest) = when {
+                req.path?.startsWith("/mypage/selectMyLotteryledger.do") == true ->
+                    MockResponse().setResponseCode(503).setBody("<html>maintenance</html>")
+                else -> MockResponse().setBody("ok")
+            }
+        }
+        service.fetchRecentPurchases()
+        Unit
+    }
+
+    /** 서버가 정상 JSON으로 "0건"을 준 경우는 실패가 아니다 — 빈 목록 그대로. */
+    @Test
+    fun `empty list json is a legitimate zero-record result`() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(req: RecordedRequest) = when {
+                req.path?.startsWith("/mypage/selectMyLotteryledger.do") == true ->
+                    MockResponse().setBody("""{"data":{"list":[]}}""")
+                else -> MockResponse().setBody("ok")
+            }
         }
         assertTrue(service.fetchRecentPurchases().isEmpty())
     }

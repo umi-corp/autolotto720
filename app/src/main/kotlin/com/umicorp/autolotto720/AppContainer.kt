@@ -74,8 +74,9 @@ class AppContainer(context: Context) {
     private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
-    private val _balance = MutableStateFlow(0)
-    val balance: StateFlow<Int> = _balance.asStateFlow()
+    /** null = 아직 모름(미로그인·조회 실패). 실패를 0으로 위장하면 허위 "잔액 부족" 알림이 나간다. */
+    private val _balance = MutableStateFlow<Int?>(null)
+    val balance: StateFlow<Int?> = _balance.asStateFlow()
 
     private val _autoEnabled = MutableStateFlow(false)
     val autoEnabled: StateFlow<Boolean> = _autoEnabled.asStateFlow()
@@ -278,9 +279,11 @@ class AppContainer(context: Context) {
                 _isLoggedIn.value = true
                 _loggedInUserId.value = id
                 _autoLoginFailed.value = false
-                val b = auth.getBalance()
-                _balance.value = b
-                BalanceAlert.checkAndNotify(appContext, b, _balanceAlertEnabled.value, _balanceAlertThreshold.value)
+                // 조회 실패(null)면 잔액을 갱신하지도, 부족 알림을 쏘지도 않는다 — 아래 refreshBalance와 동일 규칙.
+                auth.getBalance()?.let { b ->
+                    _balance.value = b
+                    BalanceAlert.checkAndNotify(appContext, b, _balanceAlertEnabled.value, _balanceAlertThreshold.value)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -324,7 +327,7 @@ class AppContainer(context: Context) {
             _lastPurchasedRound.value = accountScopedRound(store.getLastPurchasedRound(), store.getLastPurchaseOwner(), id)
             // 잔액도 전이 안에서 — 락 밖이면 로그아웃 경합 시 0으로 초기화된 잔액을 늦게 덮어쓸 수
             // 있다(crosscheck R3 H2). auth.login(6왕복)이 이미 락 안이라 추가 지연은 1왕복뿐.
-            _balance.value = auth.getBalance()
+            auth.getBalance()?.let { _balance.value = it }
         }
     }
 
@@ -339,7 +342,7 @@ class AppContainer(context: Context) {
             // → 로그아웃과 함께 해제·알람 취소. 비로그인 상태에선 스위치가 잠겨 사용자가 끌 수도 없다.
             if (_autoEnabled.value) setAutoEnabled(false)
             _isLoggedIn.value = false
-            _balance.value = 0
+            _balance.value = null
             _loggedInUserId.value = null
             _autoLoginFailed.value = false  // 자격증명 없음 = 실패 상태 아님(amber 해제)
         }
@@ -382,9 +385,13 @@ class AppContainer(context: Context) {
         return "회차기록 리셋됨 — 다음 예약 워커 실행 시 이번 회차를 실제 구매합니다"
     }
 
-    /** 잔액 재조회 + 잔액부족 체크(원본 home/_refreshBalance). [from]=즉시구매 전용 세션 등 다른 로그인 세션 지정용. */
+    /**
+     * 잔액 재조회 + 잔액부족 체크(원본 home/_refreshBalance). [from]=즉시구매 전용 세션 등 다른 로그인 세션 지정용.
+     * 조회 실패(null)는 마지막 성공값을 유지하고 알림도 보내지 않는다 — 서버가 느린 것을
+     * "예치금 0원"으로 통보하면 그날 중복방지 잠금이 걸려 진짜 부족 알림까지 막힌다.
+     */
     suspend fun refreshBalance(from: AuthService = auth) {
-        val b = from.getBalance()
+        val b = from.getBalance() ?: return
         _balance.value = b
         BalanceAlert.checkAndNotify(appContext, b, _balanceAlertEnabled.value, _balanceAlertThreshold.value)
     }
@@ -780,7 +787,7 @@ class AppContainer(context: Context) {
             auth.logout()
             scheduler.cancelAll()  // 삭제된 설정을 참조하는 알람 제거 (원본 대비 의도된 보강)
             _isLoggedIn.value = false
-            _balance.value = 0
+            _balance.value = null
             _autoEnabled.value = false
             _autoGames.value = 0
             _numberConfig.value = NumberConfig720.empty()
