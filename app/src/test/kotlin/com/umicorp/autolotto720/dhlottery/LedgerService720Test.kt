@@ -25,6 +25,7 @@ class LedgerService720Test {
     private lateinit var server: MockWebServer
     private lateinit var session: DhlotterySession
     private val pages = mutableListOf<String?>()
+    private var winningCalls = 0
     private val window = Window(LocalDate.parse("2026-08-22"), LocalDate.parse("2026-11-22"))
 
     @Before fun setUp() {
@@ -47,9 +48,11 @@ class LedgerService720Test {
                     pages += n
                     page(n!!.toInt())
                 }
-                ApiConstants.WINNING_NUMBER_720 ->
+                ApiConstants.WINNING_NUMBER_720 -> {
+                    winningCalls++
                     if (result == null) MockResponse().setResponseCode(404)
                     else MockResponse().setBody("""{"data":{"result":[$result]}}""")
+                }
                 else -> MockResponse().setBody("ok")
             }
         }
@@ -135,6 +138,16 @@ class LedgerService720Test {
         assertEquals("FIRST", first.rk)
         assertEquals(0L, first.amt)
         assertTrue(out.getValue("O2|1:000000").u) // 331회 당첨번호 없음 → 그대로
+    }
+
+    // 당첨번호 목록은 전 회차를 한 번에 준다. 프리필은 과거로 내려가므로 실행(서비스 인스턴스)당 한 번만 받는다.
+    @Test fun fetch_winningNumbersFetchedOncePerRun() = runBlocking {
+        val win329 = """{"psltEpsd":329,"wnBndNo":"1","wnRnkVl":"111112","bnsRnkVl":"222222","psltRflYmd":"20261001"}"""
+        serve("$win330,$win329") { ok(1, listOf(pension("O${pages.size}", "1:000001", result = "낙첨", round = 330 - pages.size + 1))) }
+        val svc = service
+        svc.fetch(window)
+        svc.fetch(Window(LocalDate.parse("2026-05-21"), LocalDate.parse("2026-08-21")))
+        assertEquals(1, winningCalls)
     }
 
     @Test fun fetch_pagesUntilTotal() = runBlocking {

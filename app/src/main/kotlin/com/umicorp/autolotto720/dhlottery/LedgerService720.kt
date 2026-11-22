@@ -26,6 +26,10 @@ class LedgerService720(
 
     private var visited = false
 
+    // 당첨번호 목록은 전 회차를 한 번에 준다. 프리필은 과거로 내려가므로 처음 본 최대 회차까지 한 번 받아 둔다.
+    private val winning = mutableMapOf<Int, WinningNumbers720>()
+    private var winningUpTo = 0
+
     override suspend fun fetch(w: Window): List<LedgerRow> {
         val tickets = withContext(Dispatchers.IO) {
             // 원장 페이지 방문(Referer·쿠키)은 프리필 창마다가 아니라 실행당 한 번이면 된다.
@@ -35,7 +39,15 @@ class LedgerService720(
             }
             fetchLedgerPages(session, w).filter { it.optString("ltGdsCd") == "LP72" }.flatMap(::toTickets)
         }
-        val winning = results.getWinningNumbersMap(tickets.mapTo(mutableSetOf()) { it.row.r })
+        val top = tickets.maxOfOrNull { it.row.r } ?: 0
+        if (top > winningUpTo) {
+            // 조회 실패는 빈 맵으로 온다. 그때는 표시만 남기지 않고 다음 창에서 다시 받는다.
+            val got = results.getWinningNumbersMap((1..top).toSet())
+            if (got.isNotEmpty()) {
+                winning += got
+                winningUpTo = top
+            }
+        }
         return tickets.map { t -> winning[t.row.r]?.let { judged(t.row, it) } ?: t.fallback() }
     }
 
