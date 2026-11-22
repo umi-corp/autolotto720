@@ -87,7 +87,7 @@ p { margin: 0; }
 .brand img { width: 32px; height: 32px; border-radius: 9px; }
 .nav-right { display: flex; align-items: center; gap: 18px; }
 .nav-links { display: flex; gap: 22px; }
-.nav-links a { color: var(--text-2); font-size: 15px; text-decoration: none; }
+.nav-links a { color: var(--text-2); font-size: 15px; text-decoration: none; white-space: nowrap; }
 .nav-links a:hover { color: var(--text); }
 .lang-switch { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface-2); }
 .lang-switch a { padding: 3px 9px; border-radius: 999px; color: var(--text-3); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-decoration: none; }
@@ -97,7 +97,7 @@ p { margin: 0; }
 .icon { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 [data-theme="light"] .theme-btn .sun, [data-theme="dark"] .theme-btn .moon { display: none; }
 .nav-cta { padding: 8px 16px; border-radius: 999px; background: var(--cta); color: var(--on-cta); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
-@media (max-width: 900px) { .nav-links { display: none; } }
+@media (max-width: 1040px) { .nav-links { display: none; } }
 /* 앱 이름이 길어 ja 내비가 470px 아래에서 넘친다. 이름은 화면에서만 숨기고 링크 이름으로 남긴다 */
 @media (max-width: 480px) { .nav-right { gap: 10px; } .nav-cta { padding: 7px 12px; } .brand span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
 
