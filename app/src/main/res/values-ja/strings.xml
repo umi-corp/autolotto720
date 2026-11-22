@@ -260,7 +260,7 @@
     <string name="ledgerPurchase">購入額</string>
     <string name="ledgerPrize">当選金</string>
     <string name="ledgerWon">%1$sウォン</string>
-    <string name="ledgerUnits">%1$d枚</string>
+    <string name="ledgerUnits">%1$dゲーム</string>
     <string name="ledgerWins">当選%1$d回</string>
     <string name="ledgerReturn">購入額に対する当選金の割合</string>
     <string name="ledgerMonthly">月別表示</string>

@@ -268,7 +268,7 @@
     <string name="ledgerPurchase">구매</string>
     <string name="ledgerPrize">당첨금</string>
     <string name="ledgerWon">%1$s원</string>
-    <string name="ledgerUnits">%1$d매</string>
+    <string name="ledgerUnits">%1$d게임</string>
     <string name="ledgerWins">당첨 %1$d회</string>
     <string name="ledgerReturn">구매 대비 당첨금</string>
     <string name="ledgerMonthly">월별 보기</string>

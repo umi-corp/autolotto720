@@ -260,7 +260,7 @@
     <string name="ledgerPurchase">Spent</string>
     <string name="ledgerPrize">Winnings</string>
     <string name="ledgerWon">₩%1$s</string>
-    <string name="ledgerUnits">%1$d tickets</string>
+    <string name="ledgerUnits">%1$d games</string>
     <string name="ledgerWins">%1$d wins</string>
     <string name="ledgerReturn">Winnings vs. spent</string>
     <string name="ledgerMonthly">Monthly view</string>
