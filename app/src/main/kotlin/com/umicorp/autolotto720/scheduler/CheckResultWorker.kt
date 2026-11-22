@@ -3,6 +3,9 @@ package com.umicorp.autolotto720.scheduler
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.umicorp.autolotto720.data.LEDGER_ZONE
+import com.umicorp.autolotto720.data.LedgerStore
+import com.umicorp.autolotto720.data.LedgerSync
 import com.umicorp.autolotto720.data.Rank720
 import com.umicorp.autolotto720.data.RankChecker720
 import com.umicorp.autolotto720.data.SecureStore
@@ -11,9 +14,13 @@ import com.umicorp.autolotto720.data.WinningNumbers720
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
 import com.umicorp.autolotto720.dhlottery.HistoryService720
+import com.umicorp.autolotto720.dhlottery.LedgerService720
 import com.umicorp.autolotto720.dhlottery.ResultService720
 import com.umicorp.autolotto720.dhlottery.Round720
+import com.umicorp.autolotto720.dhlottery.resolveUnresolved
 import kotlin.coroutines.cancellation.CancellationException
+import java.io.File
+import java.time.OffsetDateTime
 
 /**
  * 당첨확인 백그라운드 작업 — 연금복권720+ 포트 (원본 `_onCheckResultAlarm`/645 CheckResultWorker 기반).
@@ -56,6 +63,18 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
         return if (done) Result.success() else Result.retry()
     }
 
+    /** 누적 요약 원장 갱신. 실패해도 알림·재시도 판정은 바꾸지 않는다. */
+    private suspend fun syncLedger(userId: String, session: DhlotterySession) {
+        try {
+            val results = ResultService720(session)
+            LedgerSync(LedgerStore(File(ctx.filesDir, "ledger"), "720"), { OffsetDateTime.now(LEDGER_ZONE) }, resolve = { resolveUnresolved(it, results) })
+                .run(userId, LedgerService720(session, results))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
+    }
+
     /** 원본 `_executeCheckResult` 기반. @return true=완결(성공/폴백/무동작), false=미확정(재시도 필요). */
     private suspend fun executeCheckResult(lastAttempt: Boolean): Boolean {
         if (!store.getAutoEnabled()) return true
@@ -72,6 +91,7 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
 
         // 로그인 → 구매이력 조회(읽기전용 — 구매 게이트와 무관). 실패는 마지막 시도 전까지 재시도.
         // 자격증명 없으면 빈 목록(무의미한 네트워크·재시도 방지). 이력이 있으면 당첨 대조 알림, 없으면 당첨번호만.
+        var ledgerAccount: Pair<String, DhlotterySession>? = null  // 알림 뒤 원장 갱신용
         val tickets: List<Ticket720> = try {
             val cred = store.getCredentials()
             val userId = cred.userId ?: throw Exception("no_credentials")
@@ -82,6 +102,7 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
             auth.login(userId, password)
 
             HistoryService720(session, ResultService720(session)).fetchRecentPurchases()
+                .also { ledgerAccount = userId to session }
         } catch (e: Exception) {
             if (e is CancellationException) throw e   // 코루틴 취소는 삼키지 않는다(R3).
             if (!lastAttempt) return false
@@ -95,6 +116,7 @@ class CheckResultWorker(context: Context, params: WorkerParameters) : CoroutineW
             is CheckOutcome.Matched -> buildMatchedNotification(round, outcome.winning, outcome.tickets)
         }
         Notifications.show(ctx, title, body, 2, tab = Notifications.TAB_HISTORY)
+        ledgerAccount?.let { (userId, session) -> syncLedger(userId, session) }
         return true
     }
 

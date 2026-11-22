@@ -5,12 +5,16 @@ import androidx.lifecycle.viewModelScope
 import com.umicorp.autolotto720.AppContainer
 import com.umicorp.autolotto720.BudgetExceededException
 import com.umicorp.autolotto720.data.FallbackPolicy
+import com.umicorp.autolotto720.data.Ledger
+import com.umicorp.autolotto720.data.LedgerSummary
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.Slot720
 import com.umicorp.autolotto720.data.Ticket720
 import com.umicorp.autolotto720.data.WinningNumbers720
+import com.umicorp.autolotto720.data.summarize
 import com.umicorp.autolotto720.dhlottery.PurchaseResult720
 import com.umicorp.autolotto720.dhlottery.Round720
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +23,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.ZonedDateTime
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -298,6 +304,10 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
     /** 진행 중 조회 — 로그아웃·계정 전환 시 취소해 이전 계정 응답의 늦은 반영을 막는다(crosscheck R1 F4). */
     private var loadJob: Job? = null
 
+    private val _ledger = MutableStateFlow(LedgerUi())
+    val ledger: StateFlow<LedgerUi> = _ledger.asStateFlow()
+    private var ledgerJob: Job? = null
+
     init {
         // 로그인 전이 관찰: 재로그인 시 자동 복구(빈 목록), 로그아웃·계정 전환 시 목록 초기화.
         viewModelScope.launch {
@@ -308,6 +318,7 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
                             shownUser = null
                             // 목록이 비어 있어도 무조건 — 첫 로드 in-flight 취소가 목적(crosscheck R2 G4).
                             resetList()
+                            resetLedger()
                         }
                         // 로그인 직후 userId 발행 전 중간 방출 — 계정 미확정이라 로드하지 않는다
                         // (userId 방출이 곧 뒤따라 아래 분기로 로드된다). 이중 로드 방지(crosscheck R1 F4).
@@ -315,6 +326,7 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
                         user != shownUser -> {
                             shownUser = user
                             resetList()
+                            resetLedger()
                             loadHistory()
                         }
                         _tickets.value.isEmpty() && !_loading.value -> loadHistory()
@@ -333,9 +345,38 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
         windowsLoaded = 0
     }
 
+    private fun resetLedger() {
+        ledgerJob?.cancel()
+        _ledger.value = LedgerUi()
+    }
+
+    /**
+     * 누적 요약: 저장된 원장을 먼저 보이고, 동기화·프리필 진행에 따라 갱신한다. 이미 도는 중이면 건너뛴다.
+     * [force]가 아니면(탭 재진입·앱 복귀) 최근 동기화가 있을 때 저장본만 보인다 — 원장은 추첨 뒤에만 바뀐다.
+     */
+    fun syncLedger(force: Boolean = false) {
+        val user = container.loggedInUserId.value ?: return
+        if (!container.isLoggedIn.value || ledgerJob?.isActive == true) return
+        ledgerJob = viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) { container.ledgerStore.load(user) }
+            _ledger.update { it.withLedger(saved) }
+            val fresh = saved.syncedAt?.isAfter(OffsetDateTime.now().minusMinutes(LEDGER_FRESH_MINUTES)) == true
+            if (!force && fresh && saved.prefill?.done == true) return@launch
+            try {
+                val done = container.syncLedger(user) { l -> _ledger.update { it.withLedger(l) } }
+                _ledger.update { it.withLedger(done).copy(failed = false) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _ledger.update { it.copy(failed = true, prefilling = false) }
+            }
+        }
+    }
+
     /** 첫 3개월 창 로드(새로고침 겸용 — 더 보기로 쌓인 이전 창은 버리고 리셋). */
     fun loadHistory() {
         if (!container.isLoggedIn.value) return
+        syncLedger(force = true)
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             _loading.value = true
@@ -421,6 +462,24 @@ class HistoryViewModel(private val container: AppContainer) : ViewModel() {
         const val MAX_WINDOWS = 4     // 4×3개월 = 서버 보관 한도 1년
     }
 }
+
+private const val LEDGER_FRESH_MINUTES = 10L
+
+/** 내역 탭 누적 요약 카드 상태. */
+data class LedgerUi(
+    val summary: LedgerSummary? = null,
+    val prefilling: Boolean = false,
+    val prefillReached: LocalDate? = null,
+    val failed: Boolean = false,
+    val syncedAt: OffsetDateTime? = null,
+)
+
+private fun LedgerUi.withLedger(l: Ledger) = copy(
+    summary = summarize(l.rows),
+    prefilling = l.prefill?.done != true,
+    prefillReached = l.prefill?.nextEnd,
+    syncedAt = l.syncedAt,
+)
 
 /** 설정: 로그인/로그아웃·잔액·자동구매 설정·언어·잔액알림·초기화. */
 class SettingsViewModel(private val container: AppContainer) : ViewModel() {

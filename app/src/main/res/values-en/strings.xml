@@ -253,4 +253,26 @@
     <string name="instantGuardSaveFailed">Purchase succeeded, but saving the round record failed. To avoid a double charge, please check your scheduled auto-purchase setting and your purchase history.</string>
     <string name="instantPartialRejected">The remaining %1$d game(s) were declined by the server and not purchased.</string>
     <string name="instantPartialUnknown">Could not confirm the remaining %1$d game(s). Please check the History tab.</string>
+
+    <!-- 누적 요약 -->
+    <string name="ledgerTitle">Totals</string>
+    <string name="ledgerSince">Since %1$s</string>
+    <string name="ledgerPurchase">Spent</string>
+    <string name="ledgerPrize">Winnings</string>
+    <string name="ledgerWon">₩%1$s</string>
+    <string name="ledgerUnits">%1$d tickets</string>
+    <string name="ledgerWins">%1$d wins</string>
+    <string name="ledgerReturn">Winnings vs. spent</string>
+    <string name="ledgerMonthly">Monthly view</string>
+    <string name="ledgerSynced">Updated %1$s</string>
+    <string name="ledgerPendingCount">%1$d awaiting draw</string>
+    <string name="ledgerPrefilling">Checked back to %1$s</string>
+    <string name="ledgerPrefillingMeta">Checking past records</string>
+    <string name="ledgerFailed">Couldn\'t reach DHLottery. Showing saved totals.</string>
+    <string name="ledgerSheetTitle">Monthly spending and winnings</string>
+    <string name="ledgerColMonth">Month</string>
+    <string name="ledgerColWins">Wins</string>
+    <string name="ledgerPrizeLump">Winnings (lump sum)</string>
+    <string name="ledgerAnnuity">Annuity wins (1st, 2nd, bonus)</string>
+    <string name="ledgerAnnuityCount">%1$d</string>
 </resources>

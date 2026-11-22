@@ -52,6 +52,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.umicorp.autolotto720.R
 import com.umicorp.autolotto720.data.Rank720
 import com.umicorp.autolotto720.data.Ticket720
@@ -77,8 +78,13 @@ import kotlinx.coroutines.delay
  * + 조+번호 표기. 시그니처 모션: 카드 스태거 등장(fade + rise, MotionSpecs.staggerDelay).
  */
 @Composable
-fun HistoryScreen(modifier: Modifier = Modifier) {
+fun HistoryScreen(modifier: Modifier = Modifier, visible: Boolean = true) {
     val vm: HistoryViewModel = appViewModel()
+    // 탭은 keep-alive라 재진입·앱 복귀 때 누적 요약을 다시 맞춘다(워커가 원장을 갱신했을 수 있다).
+    LifecycleResumeEffect(visible) {
+        if (visible) vm.syncLedger()
+        onPauseOrDispose {}
+    }
     val tickets by vm.tickets.collectAsState()
     val loading by vm.loading.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
@@ -86,6 +92,11 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
     val loadFailed by vm.loadFailed.collectAsState()
     val isLoggedIn by vm.isLoggedIn.collectAsState()
     val winningNumbers by vm.winningNumbers.collectAsState()
+    val ledger by vm.ledger.collectAsState()
+    var showMonthly by remember { mutableStateOf(false) }
+    val summaryCard: @Composable (Modifier) -> Unit = { m ->
+        if (isLoggedIn) LedgerSummaryCard(ledger, onOpenMonthly = { showMonthly = true }, onRetry = { vm.syncLedger(force = true) }, modifier = m)
+    }
 
     // 회차별 그룹핑(autolotto 645 참조): 평탄화된 티켓을 회차로 묶어 카드 1개 안에 조+번호 행들로.
     // groupBy는 LinkedHashMap이라 dhlottery 최신순(첫 등장 회차 먼저)을 그대로 보존한다.
@@ -126,15 +137,24 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
                         CircularProgressIndicator()
                     }
 
-                    1 -> EmptyState(
-                        isLoggedIn = isLoggedIn,
-                        // 최근 3개월이 비어도 이전 창에 내역이 있을 수 있음 → 빈 화면에서도 더 보기
-                        canLoadMore = isLoggedIn && canLoadMore,
-                        loadingMore = loadingMore,
-                        onLoadMore = vm::loadMore,
-                    )
+                    // 카드는 원장 값이라 목록이 비거나 조회에 실패해도 남는다.
+                    1 -> Column(Modifier.fillMaxSize()) {
+                        summaryCard(Modifier.padding(20.dp))
+                        Box(Modifier.weight(1f)) {
+                            EmptyState(
+                                isLoggedIn = isLoggedIn,
+                                // 최근 3개월이 비어도 이전 창에 내역이 있을 수 있음 → 빈 화면에서도 더 보기
+                                canLoadMore = isLoggedIn && canLoadMore,
+                                loadingMore = loadingMore,
+                                onLoadMore = vm::loadMore,
+                            )
+                        }
+                    }
 
-                    3 -> ConnectionErrorState(onRetry = vm::loadHistory)
+                    3 -> Column(Modifier.fillMaxSize()) {
+                        summaryCard(Modifier.padding(20.dp))
+                        Box(Modifier.weight(1f)) { ConnectionErrorState(onRetry = vm::loadHistory) }
+                    }
 
                     else -> PullToRefreshBox(
                         isRefreshing = loading,
@@ -145,6 +165,7 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
                             contentPadding = PaddingValues(20.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
+                            if (isLoggedIn) item { summaryCard(Modifier) }
                             itemsIndexed(rounds) { i, g ->
                                 RoundCard(round = g.first, tickets = g.second, index = i, winning = winningNumbers[g.first])
                             }
@@ -157,6 +178,8 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
             }
         }
     }
+    val summary = ledger.summary
+    if (showMonthly && summary != null) LedgerMonthlySheet(summary, onDismiss = { showMonthly = false })
 }
 
 @Composable

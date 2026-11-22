@@ -113,7 +113,7 @@ class HistoryService720(
         }
     }
 
-    private companion object {
+    internal companion object {
         val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd")
         val SIX_DIGITS = Regex("\\d{6}")
 

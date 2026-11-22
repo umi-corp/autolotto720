@@ -8,6 +8,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.umicorp.autolotto720.data.BudgetGuard
 import com.umicorp.autolotto720.data.FallbackPolicy
+import com.umicorp.autolotto720.data.LEDGER_ZONE
+import com.umicorp.autolotto720.data.Ledger
+import com.umicorp.autolotto720.data.LedgerLock
+import com.umicorp.autolotto720.data.LedgerStore
+import com.umicorp.autolotto720.data.LedgerSync
 import com.umicorp.autolotto720.data.NumberConfig720
 import com.umicorp.autolotto720.data.SecureStore
 import com.umicorp.autolotto720.data.Slot720
@@ -18,10 +23,12 @@ import com.umicorp.autolotto720.dhlottery.DhlotteryException
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
 import com.umicorp.autolotto720.dhlottery.Feature720
 import com.umicorp.autolotto720.dhlottery.HistoryService720
+import com.umicorp.autolotto720.dhlottery.LedgerService720
 import com.umicorp.autolotto720.dhlottery.PurchaseResult720
 import com.umicorp.autolotto720.dhlottery.PurchaseService720
 import com.umicorp.autolotto720.dhlottery.ResultService720
 import com.umicorp.autolotto720.dhlottery.Round720
+import com.umicorp.autolotto720.dhlottery.resolveUnresolved
 import com.umicorp.autolotto720.scheduler.AlarmScheduler
 import com.umicorp.autolotto720.scheduler.BalanceAlert
 import com.umicorp.autolotto720.scheduler.PurchaseLock
@@ -48,6 +55,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.time.OffsetDateTime
 import java.time.ZonedDateTime
 import java.util.Locale
 import kotlin.coroutines.cancellation.CancellationException
@@ -78,6 +86,7 @@ class AppContainer(context: Context) {
     // === 720 서비스 ===
     val resultService720 = ResultService720()
     val historyService720 = HistoryService720(session, resultService720)
+    val ledgerStore = LedgerStore(File(appContext.filesDir, "ledger"), "720")
 
     // === 공유 반응형 상태 (원본 전역 프로바이더와 1:1) ===
     private val _isLoggedIn = MutableStateFlow(false)
@@ -827,6 +836,12 @@ class AppContainer(context: Context) {
         if (store.setWeeklyBudget(won)) _weeklyBudget.value = won
     }
 
+    /** 누적 요약 원장 동기화(+프리필). 연결 실패는 IOException. */
+    suspend fun syncLedger(userId: String, onProgress: (Ledger) -> Unit): Ledger = withContext(Dispatchers.IO) {
+        LedgerSync(ledgerStore, { OffsetDateTime.now(LEDGER_ZONE) }, resolve = { resolveUnresolved(it, resultService720) })
+            .run(userId, LedgerService720(session, resultService720), onProgress)
+    }
+
     // === 데이터 초기화 (원본 설정 화면 `_showResetDialog`) ===
     suspend fun resetAll() = withContext(Dispatchers.IO) {
         // 전이 전체를 직렬화(crosscheck R2 G1) — login/logout과 동일 원칙. 락 밖이면 진행 중 로그인의
@@ -834,6 +849,7 @@ class AppContainer(context: Context) {
         // 접근과도 직렬화(PurchaseLock 대칭, 허용 중첩 방향 loginMutex ⊃ PurchaseLock 준수).
         loginMutex.withLock {
             PurchaseLock.mutex.withLock { store.clearAll() }
+            LedgerLock.mutex.withLock { ledgerStore.clearAll() }
             auth.logout()
             scheduler.cancelAll()  // 삭제된 설정을 참조하는 알람 제거 (원본 대비 의도된 보강)
             _isLoggedIn.value = false
