@@ -1,10 +1,12 @@
 package com.umicorp.autolotto720.scheduler
 
+import com.umicorp.autolotto720.dhlottery.PartialFailure
 import com.umicorp.autolotto720.dhlottery.Round720
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -22,6 +24,29 @@ import java.time.ZonedDateTime
  * 코드 리뷰로 확인했다. 여기서는 그 뒤에 실행될 순수 가드 로직만 독립적으로 검증한다.
  */
 class AutoPurchaseWorkerTest {
+
+    @Test fun `four skipped games are reported after one ticket was purchased`() {
+        assertEquals(
+            "\n⚠️ 나머지 4게임은 구매되지 않았습니다. 내역을 확인해주세요.",
+            AutoPurchaseWorker.purchaseWarning(unconfirmedGames = 4, failure = null),
+        )
+    }
+
+    @Test fun `skipped games are distinct from an unknown payment result`() {
+        val warning = AutoPurchaseWorker.purchaseWarning(
+            unconfirmedGames = 4,
+            failure = PartialFailure(failedGames = 3, cause = IOException()),
+        )
+        assertEquals(
+            "\n⚠️ 1게임은 구매되지 않았습니다." +
+                "\n⚠️ 나머지 3게임은 결과를 확인하지 못했습니다. 내역을 확인해주세요.",
+            warning,
+        )
+    }
+
+    @Test fun `complete purchase has no warning`() {
+        assertEquals("", AutoPurchaseWorker.purchaseWarning(unconfirmedGames = 0, failure = null))
+    }
 
     private val kst = ZoneId.of("Asia/Seoul")
     private fun at(y: Int, mo: Int, d: Int, h: Int, mi: Int) = ZonedDateTime.of(y, mo, d, h, mi, 0, 0, kst)
