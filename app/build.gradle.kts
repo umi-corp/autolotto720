@@ -19,6 +19,7 @@ android {
 
     defaultConfig {
         applicationId = "com.umicorp.autolotto720"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 31          // Android 12 — dynamic color / M3 Expressive 풀 적용, 폴백 불필요
         targetSdk = 36
         versionCode = 21
@@ -110,6 +111,9 @@ dependencies {
     implementation("androidx.browser:browser:1.10.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 
     testImplementation("junit:junit:4.13.2")
     // JVM 단위테스트에서 org.json은 android.jar 스텁(RuntimeException "Stub!") → 실제 구현 주입

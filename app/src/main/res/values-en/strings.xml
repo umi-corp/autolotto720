@@ -84,7 +84,7 @@
     <string name="buttonOverwrite">Overwrite</string>
     <string name="snackbarUndoAction">Undo</string>
     <string name="snackbarAllAutoApplied">Set all to auto</string>
-    <string name="snackbarAppliedToAll">Applied the number to all groups</string>
+    <string name="snackbarAppliedToAll">Saved the same number for groups 1–5</string>
     <string name="cdDigitFilled">%1$s of six, value %2$d</string>
     <string name="cdDigitEmpty">%1$s of six, empty</string>
     <string name="cdConfirmReadback">Group %1$d, %2$s applied</string>

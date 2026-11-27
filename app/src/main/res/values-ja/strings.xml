@@ -84,7 +84,7 @@
     <string name="buttonOverwrite">上書き</string>
     <string name="snackbarUndoAction">元に戻す</string>
     <string name="snackbarAllAutoApplied">すべて自動に設定しました</string>
-    <string name="snackbarAppliedToAll">全組に同じ番号を適用しました</string>
+    <string name="snackbarAppliedToAll">1〜5組に同じ番号を設定して保存しました</string>
     <string name="cdDigitFilled">6桁のうち%1$s、値%2$d</string>
     <string name="cdDigitEmpty">6桁のうち%1$s、未入力</string>
     <string name="cdConfirmReadback">第%1$d組 %2$s を適用しました</string>

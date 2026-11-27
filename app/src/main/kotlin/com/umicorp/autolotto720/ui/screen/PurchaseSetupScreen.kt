@@ -120,6 +120,8 @@ import com.umicorp.autolotto720.ui.util.formatNumber
 import com.umicorp.autolotto720.ui.util.localizedJoLabel
 import com.umicorp.autolotto720.ui.vm.PurchaseSetupViewModel
 import com.umicorp.autolotto720.ui.vm.PurchaseSetupViewModel.InstantState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -158,6 +160,7 @@ private val DigitsSaver: Saver<SnapshotStateList<Int?>, ArrayList<Int>> = Saver(
 fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
     val vm: PurchaseSetupViewModel = appViewModel()
     val config by vm.config.collectAsState()
+    val hydrated by vm.hydrated.collectAsState()
     val isLoggedIn by vm.isLoggedIn.collectAsState()
     val lastRound by vm.lastPurchasedRound.collectAsState()
     val instantState by vm.instantState.collectAsState()
@@ -264,22 +267,24 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
         scope.launch { confirmPop.snapTo(0.92f); confirmPop.animateTo(1f, MotionSpecs.bouncy()) }
     }
 
-    // 파괴적 조작(전부자동·전 조 적용) 공통: 이전 committed 스냅샷 + undo 스낵바로 원복(§5).
-    fun applyDestructive(newSlots: List<Slot720>, msg: String) {
-        val prev = committed.toList()
-        for (i in 0..4) committed[i] = newSlots[i]
+    fun replaceSlots(slots: List<Slot720>) {
+        for (i in slots.indices) committed[i] = slots[i]
         saved = false
         syncDraftToSlot(currentSlot)
+    }
+
+    suspend fun undoRequested(message: Int) = snackbar.showSnackbar(
+        context.getString(message),
+        actionLabel = context.getString(R.string.snackbarUndoAction),
+        duration = SnackbarDuration.Short,
+    ) == SnackbarResult.ActionPerformed
+
+    fun applyAllAuto() {
+        val prev = committed.toList()
+        replaceSlots(List(5) { Slot720.FullAuto })
         scope.launch {
-            val res = snackbar.showSnackbar(
-                msg,
-                actionLabel = context.getString(R.string.snackbarUndoAction),
-                duration = SnackbarDuration.Short,
-            )
-            if (res == SnackbarResult.ActionPerformed) {
-                for (i in 0..4) committed[i] = prev[i]
-                saved = false
-                syncDraftToSlot(currentSlot)
+            if (undoRequested(R.string.snackbarAllAutoApplied)) {
+                replaceSlots(prev)
             }
         }
     }
@@ -296,16 +301,50 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(rollingAllAuto) {
         if (rollingAllAuto) {
             delay(950)
-            applyDestructive(List(5) { Slot720.FullAuto }, context.getString(R.string.snackbarAllAutoApplied))
+            applyAllAuto()
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             rollingAllAuto = false
         }
     }
 
+    fun editorConfig() = vm.config.value.copy(slots = committed.toList(), fallback = fallback, setMode = setMode)
+
+    suspend fun save(target: NumberConfig720): Boolean {
+        saving = true
+        saved = false
+        return try {
+            val ok = vm.saveConfigAwait(target.slots, target.fallback, target.setMode)
+            saved = ok && editorConfig() == vm.config.value
+            ok
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        } finally {
+            saving = false
+        }
+    }
+
     val manualComplete = numberManual && groupSel in 1..5 && digits.all { it != null }
     fun doApplyToAll() {
+        if (!hydrated || saving) return
         val ds = digits.map { it ?: return }
-        applyDestructive(List(5) { Slot720.Manual(it + 1, ds) }, context.getString(R.string.snackbarAppliedToAll))
+        val previousSaved = vm.config.value
+        val previousEditor = editorConfig()
+        replaceSlots((1..5).map { Slot720.Manual(it, ds) })
+        snackbar.currentSnackbarData?.dismiss()
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            if (!save(editorConfig())) return@launch
+            val appliedRevision = vm.config.value.revision
+            if (undoRequested(R.string.snackbarAppliedToAll) && !saving && vm.config.value.revision == appliedRevision) {
+                val restored = save(previousSaved)
+                val editor = if (restored) previousEditor else previousSaved
+                fallback = editor.fallback
+                setMode = editor.setMode
+                replaceSlots(editor.slots)
+                saved = restored && previousEditor == previousSaved
+            }
+        }
     }
     fun triggerApplyToAll() { if (needsApplyAllGuard) showApplyAllDialog = true else doApplyToAll() }
 
@@ -456,7 +495,7 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                                         digits[activeDigit] = null
                                     }
                                 },
-                                applyEnabled = manualComplete && !locked,
+                                applyEnabled = manualComplete && hydrated && !saving && !locked,
                                 onApplyAll = { triggerApplyToAll() },
                             )
                         }
@@ -522,7 +561,6 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                 // 저장 완료 색은 645와 동일한 그린 고정 — 720 테마 tertiary(LgGold)는 당첨 강조용이라 쓰지 않는다.
                 // 하이드레이션 성공 전엔 저장 차단 — 설정 로드 실패 상태의 빈 슬롯이 디스크의
                 // 실데이터를 덮어쓰는 유실 방지(645 crosscheck 포트). 복구는 홈 amber 아이콘 탭.
-                val hydrated by vm.hydrated.collectAsState()
                 val dark = isSystemInDarkTheme()
                 val saveContainer by animateColorAsState(
                     if (saved) (if (dark) Color(0xFF9BD97A) else Color(0xFF6FBF3B)) else MaterialTheme.colorScheme.primary,
@@ -538,12 +576,12 @@ fun PurchaseSetupScreen(modifier: Modifier = Modifier) {
                         // commit 성공 후에만 saved·완료 스낵바 — 세트 토글과 동일 게이트(saveConfigAwait).
                         // fire-and-forget saved=true는 commit 실패/대기 중 화면(녹색 saved)≠디스크(옛 설정)를 만들고
                         // saved=true라 미저장 CTA 가드까지 통과 → 워커가 옛 설정으로 결제. 저장 중 버튼 비활성화.
-                        saving = true
-                        scope.launch {
-                            val ok = vm.saveConfigAwait(committed.toList(), fallback, setMode)
-                            saving = false
-                            saved = ok
-                            if (ok) {
+                        if (saving) return@Button
+                        snackbar.currentSnackbarData?.takeIf {
+                            it.visuals.message == context.getString(R.string.snackbarAppliedToAll)
+                        }?.dismiss()
+                        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                            if (save(editorConfig())) {
                                 snackbar.showSnackbar(
                                     if (gameCount == 0) context.getString(R.string.snackbarSaveEmpty)
                                     else context.getString(R.string.snackbarSaveSuccess, gameCount),
