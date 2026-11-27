@@ -15,6 +15,7 @@ import com.umicorp.autolotto720.data.SecureStore
 import com.umicorp.autolotto720.dhlottery.AuthService
 import com.umicorp.autolotto720.dhlottery.DhlotterySession
 import com.umicorp.autolotto720.dhlottery.Feature720
+import com.umicorp.autolotto720.dhlottery.PartialFailure
 import com.umicorp.autolotto720.dhlottery.PurchaseService720
 import com.umicorp.autolotto720.dhlottery.Round720
 import kotlinx.coroutines.NonCancellable
@@ -98,7 +99,7 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
             // 공유하는 임계구역(PurchaseLock). Worker 재실행·중복 알람·번호 탭 즉시 구매·로그인 경합에도
             // 같은 회차를 두 번 사거나 기록이 다른 계정으로 어긋나지 않는다. 잔액 조회·알림은 락 밖(아래).
             step = "read_credentials"
-            val result = PurchaseLock.mutex.withLock {
+            val (result, requestedGames) = PurchaseLock.mutex.withLock {
                 val cred = store.getCredentials()
                 val userId = cred.userId
                 val password = cred.password
@@ -231,7 +232,7 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                     val resolvable = r.partialFailure == null || classifyPurchaseFailure(r.partialFailure!!.cause) is PurchaseFailure.Rejected
                     if (resolvable) store.clearPendingPurchase()   // commit+원장 반영 완료 & 미확정 게임 없음 → PENDING 해제
                 }
-                r
+                r to config.gameCount
             }
 
             // 구매 후 잔액 체크 (락 밖, 실패 무시 — 원본 catch (_) {}). 취소는 삼키지 않는다(R3).
@@ -252,14 +253,7 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
                 )
             } else {
                 val ticketLines = result.tickets.joinToString("\n") { "${it.jo}조 ${it.number}" }
-                // 부분 실패 문구는 결과 확정성으로 분기(UI InstantPartial*와 동일) — Unknown을 "구매 안 됨"으로 단정하면
-                // 재시도를 오유도하므로 "결과를 확인하지 못했습니다 — 내역 확인"으로 가른다.
-                val partialLine = result.partialFailure?.let { pf ->
-                    if (classifyPurchaseFailure(pf.cause) is PurchaseFailure.Unknown)
-                        "\n⚠️ 나머지 ${pf.failedGames}게임은 결과를 확인하지 못했습니다. 내역을 확인해주세요."
-                    else
-                        "\n⚠️ 나머지 ${pf.failedGames}게임은 구매되지 않았습니다. 내역을 확인해주세요."
-                } ?: ""
+                val partialLine = purchaseWarning(requestedGames - result.tickets.size, result.partialFailure)
                 Notifications.show(
                     ctx,
                     "🎰 AutoLotto720 자동 구매 완료!",
@@ -275,6 +269,18 @@ class AutoPurchaseWorker(context: Context, params: WorkerParameters) : Coroutine
     }
 
     companion object {
+        internal fun purchaseWarning(unconfirmedGames: Int, failure: PartialFailure?): String {
+            if (unconfirmedGames == 0) return ""
+            if (failure == null || classifyPurchaseFailure(failure.cause) is PurchaseFailure.Rejected) {
+                return "\n⚠️ 나머지 ${unconfirmedGames}게임은 구매되지 않았습니다. 내역을 확인해주세요."
+            }
+            val skipped = unconfirmedGames - failure.failedGames
+            return buildString {
+                if (skipped > 0) append("\n⚠️ ${skipped}게임은 구매되지 않았습니다.")
+                append("\n⚠️ 나머지 ${failure.failedGames}게임은 결과를 확인하지 못했습니다. 내역을 확인해주세요.")
+            }
+        }
+
         /** 총 시도 횟수(최초 1 + 재시도 2). 간격은 SchedulerReceivers의 backoff(15분 선형). */
         private const val MAX_ATTEMPTS = 3
 
