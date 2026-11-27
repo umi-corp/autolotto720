@@ -22,8 +22,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 31          // Android 12 — dynamic color / M3 Expressive 풀 적용, 폴백 불필요
         targetSdk = 36
-        versionCode = 21
-        versionName = "1.1.9"
+        versionCode = 22
+        versionName = "1.1.10"
     }
 
     if (keystorePropertiesFile.exists()) {
