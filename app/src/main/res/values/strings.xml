@@ -89,7 +89,7 @@
     <string name="buttonOverwrite">덮어쓰기</string>
     <string name="snackbarUndoAction">실행취소</string>
     <string name="snackbarAllAutoApplied">전부 자동으로 설정했습니다</string>
-    <string name="snackbarAppliedToAll">전 조에 동일번호를 적용했습니다</string>
+    <string name="snackbarAppliedToAll">1~5조에 같은 번호를 적용하고 저장했습니다</string>
     <string name="cdDigitFilled">여섯 자리 중 %1$s, 현재 값 %2$d</string>
     <string name="cdDigitEmpty">여섯 자리 중 %1$s, 미입력</string>
     <string name="cdConfirmReadback">%1$d조 %2$s 적용됨</string>
